@@ -617,8 +617,7 @@ cdef class _Qhull:
                 # Use a lower bound so that the tight loop in high dimensions
                 # is not affected by the conditional below
                 lower_bound = 0
-                if (self._is_delaunay and
-                    facet.toporient == qh_ORIENTclock and facet_ndim == 3):
+                if (facet.toporient == qh_ORIENTclock and facet_ndim == 3):
                     # Swap the first and second indices to maintain a
                     # counter-clockwise orientation.
                     for i in xrange(2):
