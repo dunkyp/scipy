@@ -9,7 +9,7 @@ from functools import partial
 
 import numpy as np
 
-from scipy.lib.six import next
+from scipy._lib.six import next
 
 """A module to read arff files."""
 
@@ -520,7 +520,7 @@ def loadarff(f):
 
     Raises
     ------
-    `ParseArffError`
+    ParseArffError
         This is raised if the given file is not ARFF-formatted.
     NotImplementedError
         The ARFF file has an attribute which is not supported yet.
@@ -607,9 +607,7 @@ def _loadarff(ofile):
     def next_data_line(row_iter):
         """Assumes we are already in the data part (eg after @data)."""
         raw = next(row_iter)
-        while r_empty.match(raw):
-            raw = next(row_iter)
-        while r_comment.match(raw):
+        while r_empty.match(raw) or r_comment.match(raw):
             raw = next(row_iter)
         return raw
 
@@ -640,9 +638,7 @@ def _loadarff(ofile):
         # We do not abstract skipping comments and empty lines for performances
         # reason.
         raw = next(row_iter)
-        while r_empty.match(raw):
-            raw = next(row_iter)
-        while r_comment.match(raw):
+        while r_empty.match(raw) or r_comment.match(raw):
             raw = next(row_iter)
 
         # 'compiling' the range since it does not change
@@ -653,9 +649,7 @@ def _loadarff(ofile):
         row = raw.split(delim)
         yield tuple([convertors[i](row[i]) for i in elems])
         for raw in row_iter:
-            while r_comment.match(raw):
-                raw = next(row_iter)
-            while r_empty.match(raw):
+            while r_comment.match(raw) or r_empty.match(raw):
                 raw = next(row_iter)
             row = raw.split(delim)
             yield tuple([convertors[i](row[i]) for i in elems])
@@ -700,37 +694,6 @@ test_weka.__test__ = False
 
 
 if __name__ == '__main__':
-    #import glob
-    #for i in glob.glob('arff.bak/data/*'):
-    #    relation, attributes = read_header(open(i))
-    #    print "Parsing header of %s: relation %s, %d attributes" % (i,
-    #            relation, len(attributes))
-
     import sys
     filename = sys.argv[1]
-    #filename = 'arff.bak/data/pharynx.arff'
-    #floupi(filename)
     test_weka(filename)
-
-    #gf = []
-    #wf = []
-    #for i in glob.glob('arff.bak/data/*'):
-    #    try:
-    #        print "=============== reading %s ======================" % i
-    #        floupi(i)
-    #        gf.append(i)
-    #    except ValueError, e:
-    #        print "!!!! Error parsing the file !!!!!"
-    #        print e
-    #        wf.append(i)
-    #    except IndexError, e:
-    #        print "!!!! Error parsing the file !!!!!"
-    #        print e
-    #        wf.append(i)
-    #    except ArffError, e:
-    #        print "!!!! Error parsing the file !!!!!"
-    #        print e
-    #        wf.append(i)
-
-    #print "%d good files" % len(gf)
-    #print "%d bad files" % len(wf)

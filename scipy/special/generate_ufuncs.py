@@ -83,6 +83,7 @@ from __future__ import division, print_function, absolute_import
 UFUNCS = """
 sph_harm -- sph_harmonic: iidd->D, sph_harmonic_unsafe: dddd->D -- sph_harm.pxd, _legacy.pxd
 _lambertw -- lambertw_scalar: Dld->D                       -- lambertw.pxd
+_ellip_harm -- ellip_harmonic: ddiiddd->d, ellip_harmonic_unsafe: ddddddd->d --_ellip_harm.pxd, _legacy.pxd
 logit -- logitf: f->f, logit: d->d, logitl: g->g           -- _logit.h
 expit -- expitf: f->f, expit: d->d, expitl: g->g           -- _logit.h
 bdtrc -- bdtrc: iid->d, bdtrc_unsafe: ddd->d               -- cephes.h, _legacy.pxd
@@ -293,6 +294,8 @@ xlog1py -- xlog1py: dd->d                                  -- _xlogy.pxd
 poch -- poch: dd->d                                        -- c_misc/misc.h
 boxcox -- boxcox: dd->d                                    -- _boxcox.pxd
 boxcox1p -- boxcox1p: dd->d                                -- _boxcox.pxd
+inv_boxcox -- inv_boxcox: dd->d                            -- _boxcox.pxd
+inv_boxcox1p -- inv_boxcox1p: dd->d                        -- _boxcox.pxd
 entr -- entr: d->d                                         -- _convex_analysis.pxd
 kl_div -- kl_div: dd->d                                    -- _convex_analysis.pxd
 rel_entr -- rel_entr: dd->d                                -- _convex_analysis.pxd

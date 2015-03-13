@@ -8,7 +8,7 @@ import numpy as np
 from numpy import (arange, zeros, array, dot, sqrt, cos, sin, eye, pi, exp,
                    allclose)
 
-from scipy.lib.six import xrange
+from scipy._lib.six import xrange
 
 from numpy.testing import (
     assert_, TestCase, run_module_suite, assert_array_almost_equal,
@@ -607,6 +607,15 @@ class LSODACheckParameterUse(ODECheckParameterUse, TestCase):
     solver_uses_jac = True
 
 
+def test_odeint_trivial_time():
+    # Test that odeint succeeds when given a single time point
+    # and full_output=True.  This is a regression test for gh-4282.
+    y0 = 1
+    t = [0]
+    y, info = odeint(lambda y, t: -y, y0, t, full_output=True)
+    assert_array_equal(y, np.array([[y0]]))
+
+
 def test_odeint_banded_jacobian():
     # Test the use of the `Dfun`, `ml` and `mu` options of odeint.
 
@@ -616,41 +625,117 @@ def test_odeint_banded_jacobian():
     def jac(y, t, c):
         return c
 
-    def bjac_cols(y, t, c):
-        return np.column_stack((np.r_[0, np.diag(c, 1)], np.diag(c)))
+    def jac_transpose(y, t, c):
+        return c.T.copy(order='C')
 
     def bjac_rows(y, t, c):
-        return np.row_stack((np.r_[0, np.diag(c, 1)], np.diag(c)))
+        jac = np.row_stack((np.r_[0, np.diag(c, 1)],
+                            np.diag(c),
+                            np.r_[np.diag(c, -1), 0],
+                            np.r_[np.diag(c, -2), 0, 0]))
+        return jac
 
-    c = array([[-50, 75, 0],
-               [0, -0.1, 1],
-               [0, 0, -1e-4]])
+    def bjac_cols(y, t, c):
+        return bjac_rows(y, t, c).T.copy(order='C')
 
-    y0 = arange(3)
-    t = np.linspace(0, 50, 6)
+    c = array([[-205, 0.01, 0.00, 0.0],
+               [0.1, -2.50, 0.02, 0.0],
+               [1e-3, 0.01, -2.0, 0.01],
+               [0.00, 0.00, 0.1, -1.0]])
 
-    # The results of the following three calls should be the same.
-    sol0, info0 = odeint(func, y0, t, args=(c,), full_output=True,
+    y0 = np.ones(4)
+    t = np.array([0, 5, 10, 100])
+
+    # Use the full Jacobian.
+    sol1, info1 = odeint(func, y0, t, args=(c,), full_output=True,
+                         atol=1e-13, rtol=1e-11, mxstep=10000,
                          Dfun=jac)
 
-    sol1, info1 = odeint(func, y0, t, args=(c,), full_output=True,
-                         Dfun=bjac_cols, ml=0, mu=1, col_deriv=True)
-
+    # Use the transposed full Jacobian, with col_deriv=True.
     sol2, info2 = odeint(func, y0, t, args=(c,), full_output=True,
-                         Dfun=bjac_rows, ml=0, mu=1)
+                         atol=1e-13, rtol=1e-11, mxstep=10000,
+                         Dfun=jac_transpose, col_deriv=True)
 
-    # These could probably be compared using `assert_array_equal`.
-    # The code paths might not be *exactly* the same, so `allclose` is used
-    # to compare the solutions.
-    assert_allclose(sol0, sol1)
-    assert_allclose(sol0, sol2)
+    # Use the banded Jacobian.
+    sol3, info3 = odeint(func, y0, t, args=(c,), full_output=True,
+                         atol=1e-13, rtol=1e-11, mxstep=10000,
+                         Dfun=bjac_rows, ml=2, mu=1)
 
-    # Verify that the number of jacobian evaluations was the same
-    # for the calls of odeint with banded jacobian.  This is a regression
-    # test--there was a bug in the handling of banded jacobians that resulted
-    # in an incorrect jacobian matrix being passed to the LSODA code.
-    # That would cause errors or excessive jacobian evaluations.
+    # Use the transposed banded Jacobian, with col_deriv=True.
+    sol4, info4 = odeint(func, y0, t, args=(c,), full_output=True,
+                         atol=1e-13, rtol=1e-11, mxstep=10000,
+                         Dfun=bjac_cols, ml=2, mu=1, col_deriv=True)
+
+    assert_allclose(sol1, sol2, err_msg="sol1 != sol2")
+    assert_allclose(sol1, sol3, atol=1e-12, err_msg="sol1 != sol3")
+    assert_allclose(sol3, sol4, err_msg="sol3 != sol4")
+
+    # Verify that the number of jacobian evaluations was the same for the
+    # calls of odeint with a full jacobian and with a banded jacobian. This is
+    # a regression test--there was a bug in the handling of banded jacobians
+    # that resulted in an incorrect jacobian matrix being passed to the LSODA
+    # code.  That would cause errors or excessive jacobian evaluations.
     assert_array_equal(info1['nje'], info2['nje'])
+    assert_array_equal(info3['nje'], info4['nje'])
+
+
+def test_odeint_errors():
+    def sys1d(x, t):
+        return -100*x
+
+    def bad1(x, t):
+        return 1.0/0
+
+    def bad2(x, t):
+        return "foo"
+
+    def bad_jac1(x, t):
+        return 1.0/0
+
+    def bad_jac2(x, t):
+        return [["foo"]]
+
+    def sys2d(x, t):
+        return [-100*x[0], -0.1*x[1]]
+
+    def sys2d_bad_jac(x, t):
+        return [[1.0/0, 0], [0, -0.1]]
+
+    assert_raises(ZeroDivisionError, odeint, bad1, 1.0, [0, 1])
+    assert_raises(ValueError, odeint, bad2, 1.0, [0, 1])
+
+    assert_raises(ZeroDivisionError, odeint, sys1d, 1.0, [0, 1], Dfun=bad_jac1)
+    assert_raises(ValueError, odeint, sys1d, 1.0, [0, 1], Dfun=bad_jac2)
+
+    assert_raises(ZeroDivisionError, odeint, sys2d, [1.0, 1.0], [0, 1],
+                  Dfun=sys2d_bad_jac)
+
+
+def test_odeint_bad_shapes():
+    # Tests of some errors that can occur with odeint.
+
+    def badrhs(x, t):
+        return [1, -1]
+
+    def sys1(x, t):
+        return -100*x
+
+    def badjac(x, t):
+        return [[0, 0, 0]]
+
+    # y0 must be at most 1-d.
+    bad_y0 = [[0, 0], [0, 0]]
+    assert_raises(ValueError, odeint, sys1, bad_y0, [0, 1])
+
+    # t must be at most 1-d.
+    bad_t = [[0, 1], [2, 3]]
+    assert_raises(ValueError, odeint, sys1, [10.0], bad_t)
+
+    # y0 is 10, but badrhs(x, t) returns [1, -1].
+    assert_raises(RuntimeError, odeint, badrhs, 10, [0, 1])
+
+    # shape of array returned by badjac(x, t) is not correct.
+    assert_raises(RuntimeError, odeint, sys1, [10, 10], [0, 1], Dfun=badjac)
 
 
 if __name__ == "__main__":

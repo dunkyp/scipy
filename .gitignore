@@ -5,6 +5,7 @@
 *~
 *$
 *.bak
+.idea/*
 *.kdev4
 *.org
 .project
@@ -67,6 +68,7 @@ MANIFEST
 # distutils configuration
 site.cfg
 # other temporary files
+.coverage
 .deps
 .libs
 
@@ -103,6 +105,11 @@ doc/source/generated
 
 # Things specific to this project #
 ###################################
+benchmarks/env
+benchmarks/results
+benchmarks/scipy
+benchmarks/html
+benchmarks/scipy-benchmarks
 scipy/__config__.py
 scipy/cluster/_vq.c
 scipy/cluster/_hierarchy.c
@@ -137,6 +144,7 @@ scipy/linalg/_fblasmodule.c
 scipy/linalg/_flapack-f2pywrappers.f
 scipy/linalg/_flapackmodule.c
 scipy/linalg/_interpolativemodule.c
+scipy/linalg/_solve_toeplitz.c
 scipy/linalg/cblas.pyf
 scipy/linalg/clapack.pyf
 scipy/linalg/fblas.pyf
@@ -181,6 +189,8 @@ scipy/sparse/sparsetools/other_impl.h
 scipy/sparse/sparsetools/sparsetools_impl.h
 scipy/spatial/ckdtree.c
 scipy/spatial/qhull.c
+scipy/special/_ellip_harm_2.c
+scipy/special/_ellip_harm_2.h
 scipy/special/_logit.c
 scipy/special/_ufuncs.c
 scipy/special/_ufuncs.h

@@ -8,10 +8,10 @@ from __future__ import division, print_function, absolute_import
 import numpy
 import numpy as np
 from numpy import (exp, log, asarray, arange, newaxis, hstack, product, array,
-                   zeros, eye, poly1d, r_, rollaxis, sum, fromstring, isfinite,
+                   zeros, eye, poly1d, r_, sum, fromstring, isfinite,
                    squeeze, amax, reshape)
 
-from scipy.lib._version import NumpyVersion
+from scipy._lib._version import NumpyVersion
 
 __all__ = ['logsumexp', 'central_diff_weights', 'derivative', 'pade', 'lena',
            'ascent', 'face']
@@ -29,11 +29,11 @@ def logsumexp(a, axis=None, b=None, keepdims=False):
         Input array.
     axis : None or int or tuple of ints, optional
         Axis or axes over which the sum is taken. By default `axis` is None,
-        and all elements are summed. Tuple of ints is not accepted if NumPy 
+        and all elements are summed. Tuple of ints is not accepted if NumPy
         version is lower than 1.7.0.
 
         .. versionadded:: 0.11.0
-    keepdims: bool, optional
+    keepdims : bool, optional
         If this is set to True, the axes which are reduced are left in the
         result as dimensions with size one. With this option, the result
         will broadcast correctly against the original array.

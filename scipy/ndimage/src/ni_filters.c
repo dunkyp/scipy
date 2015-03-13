@@ -133,8 +133,8 @@ exit:
     if (errmsg[0] != 0) {
         PyErr_SetString(PyExc_RuntimeError, errmsg);
     }
-    if (ibuffer) free(ibuffer);
-    if (obuffer) free(obuffer);
+    free(ibuffer);
+    free(obuffer);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -178,7 +178,7 @@ int NI_Correlate(PyArrayObject* input, PyArrayObject* weights,
     for(ll = 0; ll < weights->nd; ll++)
         fsize *= weights->dimensions[ll];
     pw = (Float64*)PyArray_DATA(weights);
-    pf = (Bool*)malloc(fsize * sizeof(Bool));
+    pf = malloc(fsize * sizeof(Bool));
     if (!pf) {
         PyErr_NoMemory();
         goto exit;
@@ -192,7 +192,7 @@ int NI_Correlate(PyArrayObject* input, PyArrayObject* weights,
         }
     }
     /* copy the weights to contiguous memory: */
-    ww = (Float64*)malloc(filter_size * sizeof(Float64));
+    ww = malloc(filter_size * sizeof(Float64));
     if (!ww) {
         PyErr_NoMemory();
         goto exit;
@@ -283,9 +283,9 @@ exit:
     if (err == 1) {
         PyErr_SetString(PyExc_RuntimeError, "array type not supported");
     }
-    if (offsets) free(offsets);
-    if (ww) free(ww);
-    if (pf) free(pf);
+    free(offsets);
+    free(ww);
+    free(pf);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -354,8 +354,8 @@ NI_UniformFilter1D(PyArrayObject *input, npy_intp filter_size,
     if (errmsg[0] != 0) {
         PyErr_SetString(PyExc_RuntimeError, errmsg);
     }
-    if (ibuffer) free(ibuffer);
-    if (obuffer) free(obuffer);
+    free(ibuffer);
+    free(obuffer);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -478,9 +478,9 @@ NI_MinOrMaxFilter1D(PyArrayObject *input, npy_intp filter_size,
     if (errmsg[0] != 0) {
         PyErr_SetString(PyExc_RuntimeError, errmsg);
     }
-    if (ibuffer) free(ibuffer);
-    if (obuffer) free(obuffer);
-    if (ring) free(ring);
+    free(ibuffer);
+    free(obuffer);
+    free(ring);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -541,7 +541,7 @@ int NI_MinOrMaxFilter(PyArrayObject* input, PyArrayObject* footprint,
     }
     /* get the structure: */
     if (structure) {
-        ss = (double*)malloc(filter_size * sizeof(double));
+        ss = malloc(filter_size * sizeof(double));
         if (!ss) {
             PyErr_NoMemory();
             goto exit;
@@ -634,14 +634,15 @@ exit:
     if (err == 1) {
         PyErr_SetString(PyExc_RuntimeError, "array type not supported");
     }
-    if (offsets) free(offsets);
-    if (ss) free(ss);
+    free(offsets);
+    free(ss);
     return PyErr_Occurred() ? 0 : 1;
 }
 
-static double NI_Select(double *buffer, int min, int max, int rank)
+static double NI_Select(double *buffer, npy_intp min,
+                        npy_intp max, npy_intp rank)
 {
-    int ii, jj;
+    npy_intp ii, jj;
     double x, t;
 
     if (min == max)
@@ -714,7 +715,7 @@ int NI_RankFilter(PyArrayObject* input, int rank,
         }
     }
     /* buffer for rank calculation: */
-    buffer = (double*)malloc(filter_size * sizeof(double));
+    buffer = malloc(filter_size * sizeof(double));
     if (!buffer) {
         PyErr_NoMemory();
         goto exit;
@@ -801,8 +802,8 @@ exit:
     if (err == 1) {
         PyErr_SetString(PyExc_RuntimeError, "array type not supported");
     }
-    if (offsets) free(offsets);
-    if (buffer) free(buffer);
+    free(offsets);
+    free(buffer);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -860,8 +861,8 @@ int NI_GenericFilter1D(PyArrayObject *input,
         }
     } while(more);
 exit:
-    if (ibuffer) free(ibuffer);
-    if (obuffer) free(obuffer);
+    free(ibuffer);
+    free(obuffer);
     return PyErr_Occurred() ? 0 : 1;
 }
 
@@ -931,7 +932,7 @@ int NI_GenericFilter(PyArrayObject* input,
     for(ll = 0; ll < input->nd; ll++)
         size *= input->dimensions[ll];
     /* buffer for filter calculation: */
-    buffer = (double*)malloc(filter_size * sizeof(double));
+    buffer = malloc(filter_size * sizeof(double));
     if (!buffer) {
         PyErr_NoMemory();
         goto exit;
@@ -990,7 +991,7 @@ int NI_GenericFilter(PyArrayObject* input,
         NI_FILTER_NEXT2(fi, ii, io, oo, pi, po);
     }
 exit:
-    if (offsets) free(offsets);
-    if (buffer) free(buffer);
+    free(offsets);
+    free(buffer);
     return PyErr_Occurred() ? 0 : 1;
 }

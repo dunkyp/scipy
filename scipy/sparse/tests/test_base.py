@@ -24,10 +24,10 @@ import operator
 import contextlib
 
 import numpy as np
-from scipy.lib.six import xrange, zip as izip
+from scipy._lib.six import xrange, zip as izip
 from numpy import (arange, zeros, array, dot, matrix, asmatrix, asarray,
                    vstack, ndarray, transpose, diag, kron, inf, conjugate,
-                   int8, ComplexWarning)
+                   int8, ComplexWarning, power)
 
 import random
 from numpy.testing import (assert_raises, assert_equal, assert_array_equal,
@@ -43,8 +43,8 @@ from scipy.sparse import (csc_matrix, csr_matrix, dok_matrix,
 from scipy.sparse.sputils import supported_dtypes, isscalarlike, get_index_dtype
 from scipy.sparse.linalg import splu, expm, inv
 
-from scipy.lib._version import NumpyVersion
-from scipy.lib.decorator import decorator
+from scipy._lib._version import NumpyVersion
+from scipy._lib.decorator import decorator
 
 import nose
 
@@ -140,19 +140,6 @@ def with_64bit_maxval_limit(maxval_limit=None, random=False, fixed_dtype=None,
                     setattr(mod, name, oldfunc)
 
     return deco
-
-
-def _can_cast_samekind(dtype1, dtype2):
-    """Compatibility function for numpy 1.5.1; `casting` kw is numpy >=1.6.x
-
-    default for casting kw is 'safe', which gives the same result as in 1.5.x
-    and a strict subset of 'same_kind'.  So for 1.5.x we just skip the cases
-    where 'safe' is False and 'same_kind' True.
-    """
-    if NumpyVersion(np.__version__) < '1.6.0':
-        return np.can_cast(dtype1, dtype2)
-    else:
-        return np.can_cast(dtype1, dtype2, casting='same_kind')
 
 
 def todense(a):
@@ -599,6 +586,13 @@ class _TestCommon:
     def test_abs(self):
         A = matrix([[-1, 0, 17],[0, -5, 0],[1, -4, 0],[0,0,0]],'d')
         assert_equal(abs(A),abs(self.spmatrix(A)).todense())
+        
+    def test_elementwise_power(self):
+        A = matrix([[-4, -3, -2],[-1, 0, 1],[2, 3, 4]], 'd')        
+        assert_equal(np.power(A, 2), self.spmatrix(A).power(2).todense())
+                
+        #it's element-wise power function, input has to be a scalar
+        assert_raises(NotImplementedError, self.spmatrix(A).power, A)       
 
     def test_neg(self):
         A = matrix([[-1, 0, 17],[0, -5, 0],[1, -4, 0],[0,0,0]],'d')
@@ -630,7 +624,7 @@ class _TestCommon:
         mats.append(kron(mats[3],[[1,2,3,4]]))
 
         for m in mats:
-            assert_equal(self.spmatrix(m).diagonal(),diag(m))
+            assert_equal(self.spmatrix(m).diagonal(),diag(m))        
 
     @dec.slow
     def test_setdiag(self):
@@ -1791,14 +1785,14 @@ class _TestInplaceArithmetic:
             datsp = self.datsp_dtypes[dtype]
 
             # Avoid implicit casting.
-            if _can_cast_samekind(type(2), dtype):
+            if np.can_cast(type(2), dtype, casting='same_kind'):
                 a = datsp.copy()
                 a *= 2
                 b = dat.copy()
                 b *= 2
                 assert_array_equal(b, a.todense())
 
-            if _can_cast_samekind(type(17.3), dtype):
+            if np.can_cast(type(17.3), dtype, casting='same_kind'):
                 a = datsp.copy()
                 a *= 17.3
                 b = dat.copy()
@@ -1813,14 +1807,14 @@ class _TestInplaceArithmetic:
             dat = self.dat_dtypes[dtype]
             datsp = self.datsp_dtypes[dtype]
 
-            if _can_cast_samekind(type(2), dtype):
+            if np.can_cast(type(2), dtype, casting='same_kind'):
                 a = datsp.copy()
                 a /= 2
                 b = dat.copy()
                 b /= 2
                 assert_array_equal(b, a.todense())
 
-            if _can_cast_samekind(type(17.3), dtype):
+            if np.can_cast(type(17.3), dtype, casting='same_kind'):
                 a = datsp.copy()
                 a /= 17.3
                 b = dat.copy()
@@ -1906,6 +1900,17 @@ class _TestGetSet:
                         assert_raises(TypeError, A.__setitem__, (0,0), v)
 
         for dtype in supported_dtypes:
+            yield check, np.dtype(dtype)
+
+    def test_negative_index_assignment(self):
+        # Regression test for github issue 4428.
+
+        def check(dtype):
+            A = self.spmatrix((3, 10), dtype=dtype)
+            A[0, -4] = 1
+            assert_equal(A[0, -4], 1)
+
+        for dtype in self.checked_dtypes:
             yield check, np.dtype(dtype)
 
     def test_scalar_assign_2(self):

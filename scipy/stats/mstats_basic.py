@@ -40,7 +40,7 @@ from numpy import ndarray
 import numpy.ma as ma
 from numpy.ma import masked, nomask
 
-from scipy.lib.six import iteritems
+from scipy._lib.six import iteritems
 
 import itertools
 import warnings
@@ -165,7 +165,7 @@ def count_tied_groups(x, use_missing=False):
     ----------
     x : sequence
         Sequence of data on which to counts the ties
-    use_missing : boolean
+    use_missing : bool, optional
         Whether to consider missing values as tied.
 
     Returns
@@ -224,7 +224,7 @@ def rankdata(data, axis=None, use_missing=False):
         Axis along which to perform the ranking.
         If None, the array is first flattened. An exception is raised if
         the axis is specified for arrays with a dimension larger than 2
-    use_missing : {boolean}, optional
+    use_missing : bool, optional
         Whether the masked values have a rank of 0 (False) or equal to the
         average rank of the unmasked values (True).
 
@@ -452,9 +452,9 @@ def kendalltau(x, y, use_ties=True, use_missing=False):
 
     Parameters
     ----------
-    xdata : sequence
+    x : sequence
         First data list (for example, time).
-    ydata : sequence
+    y : sequence
         Second data list.
     use_ties : {True, False}, optional
         Whether ties correction should be performed.
@@ -730,8 +730,6 @@ def ttest_rel(a, b, axis=0):
     if a.size == 0 or b.size == 0:
         return (np.nan, np.nan)
 
-    (x1, x2) = (a.mean(axis), b.mean(axis))
-    (v1, v2) = (a.var(axis=axis, ddof=1), b.var(axis=axis, ddof=1))
     n = a.count(axis)
     df = (n-1.0)
     d = (a-b).astype('d')
@@ -1432,9 +1430,29 @@ def moment(a, moment=1, axis=0):
             # the input was 1D, so return a scalar instead of a rank-0 array
             return np.float64(0.0)
     else:
-        mn = ma.expand_dims(a.mean(axis=axis), axis)
-        s = ma.power((a-mn), moment)
-        return s.mean(axis=axis)
+        # Exponentiation by squares: form exponent sequence
+        n_list = [moment]
+        current_n = moment
+        while current_n > 2:
+            if current_n % 2:
+                current_n = (current_n-1)/2
+            else:
+                current_n /= 2
+            n_list.append(current_n)
+        
+        # Starting point for exponentiation by squares
+        a_zero_mean = a - ma.expand_dims(a.mean(axis), axis)
+        if n_list[-1] == 1:
+            s = a_zero_mean.copy()
+        else:
+            s = a_zero_mean**2
+        
+        # Perform multiplications
+        for n in n_list[-2::-1]:
+            s = s**2
+            if n % 2:
+                s *= a_zero_mean
+        return s.mean(axis)
 moment.__doc__ = stats.moment.__doc__
 
 
@@ -1492,17 +1510,18 @@ def kurtosis(a, axis=0, fisher=True, bias=True):
 kurtosis.__doc__ = stats.kurtosis.__doc__
 
 
-def describe(a, axis=0,ddof=0):
+def describe(a, axis=0, ddof=0):
     """
     Computes several descriptive statistics of the passed array.
 
     Parameters
     ----------
-    a : array
-
-    axis : int or None
-
-    ddof : int
+    a : array_like
+        Data array
+    axis : int or None, optional
+        Axis along which to calculate statistics. Default 0. If None,
+        compute over the whole array `a`.
+    ddof : int, optional
         degree of freedom (default 0); note that default ddof is different
         from the same routine in stats.describe
 
@@ -1688,7 +1707,7 @@ def mquantiles(a, prob=list([.25,.5,.75]), alphap=.4, betap=.4, axis=None,
     axis : int, optional
         Axis along which to perform the trimming.
         If None (default), the input array is first flattened.
-    limit : tuple
+    limit : tuple, optional
         Tuple of (lower, upper) values.
         Values of `a` outside this open interval are ignored.
 
@@ -1848,8 +1867,8 @@ def obrientransform(*args):
     """
     Computes a transform on input data (any number of columns).  Used to
     test for homogeneity of variance prior to running one-way stats.  Each
-    array in *args is one level of a factor.  If an F_oneway() run on the
-    transformed data and found significant, variances are unequal.   From
+    array in ``*args`` is one level of a factor.  If an `f_oneway()` run on
+    the transformed data and found significant, variances are unequal.   From
     Maxwell and Delaney, p.112.
 
     Returns: transformed data for use in an ANOVA
@@ -1899,7 +1918,7 @@ def sem(a, axis=0, ddof=1):
     a : array_like
         An array containing the values for which the standard error is
         returned.
-    axis : int or None, optional.
+    axis : int or None, optional
         If axis is None, ravel `a` first. If axis is an integer, this will be
         the axis over which to operate. Defaults to 0.
     ddof : int, optional
@@ -1949,7 +1968,8 @@ def f_oneway(*args):
     any number of groups.  From Heiman, pp.394-7.
 
     Usage: ``f_oneway(*args)``, where ``*args`` is 2 or more arrays,
-                                one per treatment group.
+    one per treatment group.
+
     Returns: f-value, probability
 
     """

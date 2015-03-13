@@ -38,15 +38,15 @@ import numpy as np
 from numpy.testing import (TestCase, run_module_suite, dec, assert_raises,
                            assert_allclose, assert_equal, assert_)
 
-from scipy.lib.six import xrange
-from scipy.lib.six import u
+from scipy._lib.six import xrange, u
 
 import scipy.cluster.hierarchy
 from scipy.cluster.hierarchy import (
     linkage, from_mlab_linkage, to_mlab_linkage, num_obs_linkage, inconsistent,
     cophenet, fclusterdata, fcluster, is_isomorphic, single, leaders,
     correspond, is_monotonic, maxdists, maxinconsts, maxRstat,
-    is_valid_linkage, is_valid_im, to_tree, leaves_list, dendrogram)
+    is_valid_linkage, is_valid_im, to_tree, leaves_list, dendrogram,
+    set_link_color_palette)
 from scipy.spatial.distance import pdist
 
 import hierarchy_test_data
@@ -55,7 +55,6 @@ import hierarchy_test_data
 # Matplotlib is not a scipy dependency but is optionally used in dendrogram, so
 # check if it's available
 try:
-    # import matplotlib
     import matplotlib
     # and set the backend to be Agg (no gui)
     matplotlib.use('Agg')
@@ -72,9 +71,8 @@ class TestLinkage(object):
         y = np.zeros((0,))
         assert_raises(ValueError, linkage, y)
 
-    ################### linkage
     def test_linkage_tdist(self):
-        for method in ['single', 'complete', 'average', 'weighted', u'single']:
+        for method in ['single', 'complete', 'average', 'weighted', u('single')]:
             yield self.check_linkage_tdist, method
 
     def check_linkage_tdist(self, method):
@@ -83,7 +81,6 @@ class TestLinkage(object):
         expectedZ = getattr(hierarchy_test_data, 'linkage_ytdist_' + method)
         assert_allclose(Z, expectedZ, atol=1e-10)
 
-    ################### linkage on Q
     def test_linkage_X(self):
         for method in ['centroid', 'median', 'ward']:
             yield self.check_linkage_q, method
@@ -438,18 +435,18 @@ class TestNumObsLinkage(TestCase):
     def test_num_obs_linkage_empty(self):
         # Tests num_obs_linkage(Z) with empty linkage.
         Z = np.zeros((0, 4), dtype=np.double)
-        self.assertRaises(ValueError, num_obs_linkage, Z)
+        assert_raises(ValueError, num_obs_linkage, Z)
 
     def test_num_obs_linkage_1x4(self):
         # Tests num_obs_linkage(Z) on linkage over 2 observations.
         Z = np.asarray([[0, 1, 3.0, 2]], dtype=np.double)
-        self.assertTrue(num_obs_linkage(Z) == 2)
+        assert_equal(num_obs_linkage(Z), 2)
 
     def test_num_obs_linkage_2x4(self):
         # Tests num_obs_linkage(Z) on linkage over 3 observations.
         Z = np.asarray([[0, 1, 3.0, 2],
                         [3, 2, 4.0, 3]], dtype=np.double)
-        self.assertTrue(num_obs_linkage(Z) == 3)
+        assert_equal(num_obs_linkage(Z), 3)
 
     def test_num_obs_linkage_4_and_up(self):
         # Tests num_obs_linkage(Z) on linkage on observation sets between sizes
@@ -457,7 +454,7 @@ class TestNumObsLinkage(TestCase):
         for i in xrange(4, 15, 3):
             y = np.random.rand(i*(i-1)//2)
             Z = linkage(y)
-            self.assertTrue(num_obs_linkage(Z) == i)
+            assert_equal(num_obs_linkage(Z), i)
 
 
 class TestLeavesList(object):
@@ -500,7 +497,7 @@ class TestCorrespond(TestCase):
         # Tests correspond(Z, y) with empty linkage and condensed distance matrix.
         y = np.zeros((0,))
         Z = np.zeros((0,4))
-        self.assertRaises(ValueError, correspond, Z, y)
+        assert_raises(ValueError, correspond, Z, y)
 
     def test_correspond_2_and_up(self):
         # Tests correspond(Z, y) on linkage and CDMs over observation sets of
@@ -508,11 +505,11 @@ class TestCorrespond(TestCase):
         for i in xrange(2, 4):
             y = np.random.rand(i*(i-1)//2)
             Z = linkage(y)
-            self.assertTrue(correspond(Z, y))
+            assert_(correspond(Z, y))
         for i in xrange(4, 15, 3):
             y = np.random.rand(i*(i-1)//2)
             Z = linkage(y)
-            self.assertTrue(correspond(Z, y))
+            assert_(correspond(Z, y))
 
     def test_correspond_4_and_up(self):
         # Tests correspond(Z, y) on linkage and CDMs over observation sets of
@@ -523,8 +520,8 @@ class TestCorrespond(TestCase):
             y2 = np.random.rand(j*(j-1)//2)
             Z = linkage(y)
             Z2 = linkage(y2)
-            self.assertTrue(correspond(Z, y2) == False)
-            self.assertTrue(correspond(Z2, y) == False)
+            assert_equal(correspond(Z, y2), False)
+            assert_equal(correspond(Z2, y), False)
 
     def test_correspond_4_and_up_2(self):
         # Tests correspond(Z, y) on linkage and CDMs over observation sets of
@@ -535,8 +532,8 @@ class TestCorrespond(TestCase):
             y2 = np.random.rand(j*(j-1)//2)
             Z = linkage(y)
             Z2 = linkage(y2)
-            self.assertTrue(correspond(Z, y2) == False)
-            self.assertTrue(correspond(Z2, y) == False)
+            assert_equal(correspond(Z, y2), False)
+            assert_equal(correspond(Z2, y), False)
 
     def test_num_obs_linkage_multi_matrix(self):
         # Tests num_obs_linkage with observation matrices of multiple sizes.
@@ -544,79 +541,79 @@ class TestCorrespond(TestCase):
             X = np.random.rand(n, 4)
             Y = pdist(X)
             Z = linkage(Y)
-            self.assertTrue(num_obs_linkage(Z) == n)
+            assert_equal(num_obs_linkage(Z), n)
 
 
 class TestIsMonotonic(TestCase):
     def test_is_monotonic_empty(self):
         # Tests is_monotonic(Z) on an empty linkage.
         Z = np.zeros((0, 4))
-        self.assertRaises(ValueError, is_monotonic, Z)
+        assert_raises(ValueError, is_monotonic, Z)
 
     def test_is_monotonic_1x4(self):
         # Tests is_monotonic(Z) on 1x4 linkage. Expecting True.
         Z = np.asarray([[0, 1, 0.3, 2]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == True)
+        assert_equal(is_monotonic(Z), True)
 
     def test_is_monotonic_2x4_T(self):
         # Tests is_monotonic(Z) on 2x4 linkage. Expecting True.
         Z = np.asarray([[0, 1, 0.3, 2],
                         [2, 3, 0.4, 3]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == True)
+        assert_equal(is_monotonic(Z), True)
 
     def test_is_monotonic_2x4_F(self):
         # Tests is_monotonic(Z) on 2x4 linkage. Expecting False.
         Z = np.asarray([[0, 1, 0.4, 2],
                         [2, 3, 0.3, 3]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == False)
+        assert_equal(is_monotonic(Z), False)
 
     def test_is_monotonic_3x4_T(self):
         # Tests is_monotonic(Z) on 3x4 linkage. Expecting True.
         Z = np.asarray([[0, 1, 0.3, 2],
                         [2, 3, 0.4, 2],
                         [4, 5, 0.6, 4]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == True)
+        assert_equal(is_monotonic(Z), True)
 
     def test_is_monotonic_3x4_F1(self):
         # Tests is_monotonic(Z) on 3x4 linkage (case 1). Expecting False.
         Z = np.asarray([[0, 1, 0.3, 2],
                         [2, 3, 0.2, 2],
                         [4, 5, 0.6, 4]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == False)
+        assert_equal(is_monotonic(Z), False)
 
     def test_is_monotonic_3x4_F2(self):
         # Tests is_monotonic(Z) on 3x4 linkage (case 2). Expecting False.
         Z = np.asarray([[0, 1, 0.8, 2],
                         [2, 3, 0.4, 2],
                         [4, 5, 0.6, 4]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == False)
+        assert_equal(is_monotonic(Z), False)
 
     def test_is_monotonic_3x4_F3(self):
         # Tests is_monotonic(Z) on 3x4 linkage (case 3). Expecting False
         Z = np.asarray([[0, 1, 0.3, 2],
                         [2, 3, 0.4, 2],
                         [4, 5, 0.2, 4]], dtype=np.double)
-        self.assertTrue(is_monotonic(Z) == False)
+        assert_equal(is_monotonic(Z), False)
 
     def test_is_monotonic_tdist_linkage1(self):
         # Tests is_monotonic(Z) on clustering generated by single linkage on
         # tdist data set. Expecting True.
         Z = linkage(hierarchy_test_data.ytdist, 'single')
-        self.assertTrue(is_monotonic(Z) == True)
+        assert_equal(is_monotonic(Z), True)
 
     def test_is_monotonic_tdist_linkage2(self):
         # Tests is_monotonic(Z) on clustering generated by single linkage on
         # tdist data set. Perturbing. Expecting False.
         Z = linkage(hierarchy_test_data.ytdist, 'single')
         Z[2,2] = 0.0
-        self.assertTrue(is_monotonic(Z) == False)
+        assert_equal(is_monotonic(Z), False)
 
     def test_is_monotonic_Q_linkage(self):
         # Tests is_monotonic(Z) on clustering generated by single linkage on
         # Q data set. Expecting True.
         X = hierarchy_test_data.Q_X
         Z = linkage(X, 'single')
-        self.assertTrue(is_monotonic(Z) == True)
+        assert_equal(is_monotonic(Z), True)
 
 
 class TestMaxDists(object):
@@ -815,6 +812,18 @@ class TestDendrogram(object):
                                     [10.0, 10.0, 32.5, 32.5]],
                          'ivl': ['2', '5', '1', '0', '(2)'],
                          'leaves': [2, 5, 1, 0, 7]})
+
+    def test_dendrogram_colors(self):
+        # Tests dendrogram plots with alternate colors
+        Z = linkage(hierarchy_test_data.ytdist, 'single')
+
+        set_link_color_palette(['c', 'm', 'y', 'k'])
+        R = dendrogram(Z, no_plot=True,
+                       above_threshold_color='g', color_threshold=250)
+        set_link_color_palette(['g', 'r', 'c', 'm', 'y', 'k'])
+
+        color_list = R['color_list']
+        assert_equal(color_list, ['c', 'm', 'g', 'g', 'g'])
 
 
 def calculate_maximum_distances(Z):

@@ -26,6 +26,7 @@ Basics
    solve_banded - Solve a banded linear system
    solveh_banded - Solve a Hermitian or symmetric banded system
    solve_triangular - Solve a triangular matrix
+   solve_toeplitz - Solve a toeplitz matrix
    det - Find the determinant of a square matrix
    norm - Matrix and vector norm
    lstsq - Solve a linear least-squares problem
@@ -71,6 +72,7 @@ Decompositions
    polar - Compute the polar decomposition.
    qr - QR decomposition of a matrix
    qr_multiply - QR decomposition and multiplication by Q
+   rq - RQ decomposition of a matrix
    qz - QZ decomposition of a pair of matrices
    schur - Schur decomposition of a matrix
    rsf2csf - Real to complex Schur form
@@ -128,10 +130,12 @@ Special Matrices
    dft - Discrete Fourier transform matrix
    hadamard - Hadamard matrix of order 2**n
    hankel - Hankel matrix
+   helmert - Helmert matrix
    hilbert - Hilbert matrix
    invhilbert - Inverse Hilbert matrix
    leslie - Leslie matrix
    pascal - Pascal matrix
+   invpascal - Inverse Pascal matrix
    toeplitz - Toeplitz matrix
    tri - Construct a matrix filled with ones at and below a given diagonal
 

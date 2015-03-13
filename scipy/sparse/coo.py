@@ -9,13 +9,13 @@ from warnings import warn
 
 import numpy as np
 
-from scipy.lib.six import xrange, zip as izip
+from scipy._lib.six import xrange, zip as izip
 
 from ._sparsetools import coo_tocsr, coo_todense, coo_matvec
 from .base import isspmatrix
 from .data import _data_matrix, _minmax_mixin
 from .sputils import (upcast, upcast_char, to_native, isshape, getdtype,
-        isintlike, get_index_dtype, downcast_intp_index, _compat_bincount)
+        isintlike, get_index_dtype, downcast_intp_index)
 
 
 class coo_matrix(_data_matrix, _minmax_mixin):
@@ -229,11 +229,11 @@ class coo_matrix(_data_matrix, _minmax_mixin):
         if axis < 0:
             axis += 2
         if axis == 0:
-            return _compat_bincount(downcast_intp_index(self.col),
-                                    minlength=self.shape[1])
+            return np.bincount(downcast_intp_index(self.col),
+                               minlength=self.shape[1])
         elif axis == 1:
-            return _compat_bincount(downcast_intp_index(self.row),
-                                    minlength=self.shape[0])
+            return np.bincount(downcast_intp_index(self.row),
+                               minlength=self.shape[0])
         else:
             raise ValueError('axis out of bounds')
     nnz = property(fget=getnnz)
@@ -414,11 +414,8 @@ class coo_matrix(_data_matrix, _minmax_mixin):
         return d
     diagonal.__doc__ = _data_matrix.diagonal.__doc__
 
-    def setdiag(self, values, k=0):
+    def _setdiag(self, values, k):
         M, N = self.shape
-        if k <= -M or k >= N:
-            raise ValueError('k exceeds matrix dimensions')
-        values = np.asarray(values, dtype=self.dtype)
         if values.ndim and not len(values):
             return
         idx_dtype = self.row.dtype
@@ -452,8 +449,6 @@ class coo_matrix(_data_matrix, _minmax_mixin):
         self.col = np.concatenate((self.col[keep], new_col))
         self.data = np.concatenate((self.data[keep], new_data))
         self.has_canonical_format = False
-
-    setdiag.__doc__ = _data_matrix.setdiag.__doc__
 
     # needed by _data_matrix
     def _with_data(self,data,copy=True):

@@ -220,6 +220,36 @@ class TestCephes(TestCase):
         assert_equal(cephes.dawsn(0),0.0)
         assert_allclose(cephes.dawsn(1.23), 0.50053727749081767)
 
+    def test_diric(self):
+        # Test behavior near multiples of 2pi.  Regression test for issue
+        # described in gh-4001.
+        n_odd = [1, 5, 25]
+        x = np.array(2*np.pi + 5e-5).astype(np.float32)
+        assert_almost_equal(special.diric(x, n_odd), 1.0, decimal=7)
+        x = np.array(2*np.pi + 1e-9).astype(np.float64)
+        assert_almost_equal(special.diric(x, n_odd), 1.0, decimal=15)
+        x = np.array(2*np.pi + 1e-15).astype(np.float64)
+        assert_almost_equal(special.diric(x, n_odd), 1.0, decimal=15)
+        if hasattr(np, 'float128'):
+            # No float128 available in 32-bit numpy
+            x = np.array(2*np.pi + 1e-12).astype(np.float128)
+            assert_almost_equal(special.diric(x, n_odd), 1.0, decimal=19)
+
+        n_even = [2, 4, 24]
+        x = np.array(2*np.pi + 1e-9).astype(np.float64)
+        assert_almost_equal(special.diric(x, n_even), -1.0, decimal=15)
+
+        # Test at some values not near a multiple of pi
+        x = np.arange(0.2*np.pi, 1.0*np.pi, 0.2*np.pi)
+        octave_result = [0.872677996249965, 0.539344662916632,
+                         0.127322003750035, -0.206011329583298]
+        assert_almost_equal(special.diric(x, 3), octave_result, decimal=15)
+
+    def test_diric_broadcasting(self):
+        x = np.arange(5)
+        n = np.array([1, 3, 7])
+        assert_(special.diric(x[:, np.newaxis], n).shape == (x.size, n.size))
+
     def test_ellipe(self):
         assert_equal(cephes.ellipe(1),1.0)
 
@@ -1260,7 +1290,7 @@ class TestEllip(TestCase):
         elkinc = special.ellipkinc(phi,m)
         assert_almost_equal(elkinc,0.79398143,8)
         # From pg. 614 of A & S
-        
+
         assert_equal(special.ellipkinc(pi/2, 0.0), pi/2)
         assert_equal(special.ellipkinc(pi/2, 1.0), np.inf)
         assert_equal(special.ellipkinc(pi/2, -np.inf), 0.0)
@@ -1275,7 +1305,7 @@ class TestEllip(TestCase):
         assert_equal(special.ellipkinc(-np.inf, np.inf), np.nan)
         assert_equal(special.ellipkinc(np.nan, 0.5), np.nan)
         assert_equal(special.ellipkinc(np.nan, np.nan), np.nan)
-    
+
         assert_allclose(special.ellipkinc(0.38974112035318718, 1), 0.4, rtol=1e-14)
         assert_allclose(special.ellipkinc(1.5707, -10), 0.79084284661724946)
 
@@ -1346,7 +1376,7 @@ class TestEllip(TestCase):
         assert_equal(special.ellipeinc(np.nan, 0.5), np.nan)
         assert_equal(special.ellipeinc(np.nan, np.nan), np.nan)
         assert_allclose(special.ellipeinc(1.5707, -10), 3.6388185585822876)
-        
+
     def test_ellipeinc_2(self):
         # Regression test for gh-3550
         # ellipeinc(phi, mbad) was NaN and mvals[2:6] were twice the correct value
@@ -2484,12 +2514,12 @@ class TestLegendre(TestCase):
         leg3 = special.legendre(3)
         leg4 = special.legendre(4)
         leg5 = special.legendre(5)
-        assert_equal(leg0.c,[1])
-        assert_equal(leg1.c,[1,0])
-        assert_equal(leg2.c,array([3,0,-1])/2.0)
-        assert_almost_equal(leg3.c,array([5,0,-3,0])/2.0)
-        assert_almost_equal(leg4.c,array([35,0,-30,0,3])/8.0)
-        assert_almost_equal(leg5.c,array([63,0,-70,0,15,0])/8.0)
+        assert_equal(leg0.c, [1])
+        assert_equal(leg1.c, [1,0])
+        assert_almost_equal(leg2.c, array([3,0,-1])/2.0, decimal=13)
+        assert_almost_equal(leg3.c, array([5,0,-3,0])/2.0)
+        assert_almost_equal(leg4.c, array([35,0,-30,0,3])/8.0)
+        assert_almost_equal(leg5.c, array([63,0,-70,0,15,0])/8.0)
 
 
 class TestLambda(TestCase):

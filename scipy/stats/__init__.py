@@ -8,50 +8,14 @@ Statistical functions (:mod:`scipy.stats`)
 This module contains a large number of probability distributions as
 well as a growing library of statistical functions.
 
-Each included distribution is an instance of the class rv_continuous:
-For each given name the following methods are available:
+Each univariate distribution is an instance of a subclass of `rv_continuous`
+(`rv_discrete` for discrete distributions):
 
 .. autosummary::
    :toctree: generated/
 
    rv_continuous
-   rv_continuous.pdf
-   rv_continuous.logpdf
-   rv_continuous.cdf
-   rv_continuous.logcdf
-   rv_continuous.sf
-   rv_continuous.logsf
-   rv_continuous.ppf
-   rv_continuous.isf
-   rv_continuous.moment
-   rv_continuous.stats
-   rv_continuous.entropy
-   rv_continuous.fit
-   rv_continuous.expect
-
-Calling the instance as a function returns a frozen pdf whose shape,
-location, and scale parameters are fixed.
-
-Similarly, each discrete distribution is an instance of the class
-rv_discrete:
-
-.. autosummary::
-   :toctree: generated/
-
    rv_discrete
-   rv_discrete.rvs
-   rv_discrete.pmf
-   rv_discrete.logpmf
-   rv_discrete.cdf
-   rv_discrete.logcdf
-   rv_discrete.sf
-   rv_discrete.logsf
-   rv_discrete.ppf
-   rv_discrete.isf
-   rv_discrete.stats
-   rv_discrete.moment
-   rv_discrete.entropy
-   rv_discrete.expect
 
 Continuous distributions
 ========================
@@ -74,6 +38,7 @@ Continuous distributions
    dweibull          -- Double Weibull
    erlang            -- Erlang
    expon             -- Exponential
+   exponnorm         -- Exponentially Modified Normal
    exponweib         -- Exponentiated Weibull
    exponpow          -- Exponential Power
    f                 -- F (Snecdor F)
@@ -150,6 +115,8 @@ Multivariate distributions
 
    multivariate_normal   -- Multivariate normal distribution
    dirichlet             -- Dirichlet
+   wishart               -- Wishart
+   invwishart            -- Inverse Wishart
 
 Discrete distributions
 ======================
@@ -253,6 +220,7 @@ which work for masked arrays.
 
    ttest_1samp
    ttest_ind
+   ttest_ind_from_stats
    ttest_rel
    kstest
    chisquare
@@ -265,6 +233,7 @@ which work for masked arrays.
    wilcoxon
    kruskal
    friedmanchisquare
+   combine_pvalues
 
 .. autosummary::
    :toctree: generated/
@@ -336,7 +305,6 @@ from __future__ import division, print_function, absolute_import
 
 from .stats import *
 from .distributions import *
-from .rv import *
 from .morestats import *
 from ._binned_statistic import *
 from .kde import gaussian_kde

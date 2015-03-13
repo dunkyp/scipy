@@ -69,8 +69,8 @@ from __future__ import division, print_function, absolute_import
 import warnings
 import numpy as np
 
-from scipy.lib.six import callable, string_types
-from scipy.lib.six import xrange
+from scipy._lib.six import callable, string_types
+from scipy._lib.six import xrange
 
 from . import _distance_wrap
 from ..linalg import norm
@@ -366,6 +366,8 @@ def hamming(u, v):
     """
     u = _validate_vector(u)
     v = _validate_vector(v)
+    if u.shape != v.shape:
+        raise ValueError('The 1d arrays must have equal lengths.')
     return (u != v).mean()
 
 
@@ -684,11 +686,11 @@ def yule(u, v):
 
     .. math::
 
-         \\frac{R}{c_{TT} + c_{FF} + \\frac{R}{2}}
+         \\frac{R}{c_{TT} * c_{FF} + \\frac{R}{2}}
 
     where :math:`c_{ij}` is the number of occurrences of
     :math:`\\mathtt{u[k]} = i` and :math:`\\mathtt{v[k]} = j` for
-    :math:`k < n` and :math:`R = 2.0 * (c_{TF} + c_{FT})`.
+    :math:`k < n` and :math:`R = 2.0 * c_{TF} * c_{FT}`.
 
     Parameters
     ----------
@@ -1130,20 +1132,20 @@ def pdist(X, metric='euclidean', p=2, w=None, V=None, VI=None):
     X : ndarray
         An m by n array of m original observations in an
         n-dimensional space.
-    metric : string or function
+    metric : str or function, optional
         The distance metric to use. The distance function can
         be 'braycurtis', 'canberra', 'chebyshev', 'cityblock',
         'correlation', 'cosine', 'dice', 'euclidean', 'hamming',
         'jaccard', 'kulsinski', 'mahalanobis', 'matching',
         'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean',
         'sokalmichener', 'sokalsneath', 'sqeuclidean', 'yule'.
-    w : ndarray
+    w : ndarray, optional
         The weight vector (for weighted Minkowski).
-    p : double
+    p : double, optional
         The p-norm to apply (for Minkowski, weighted and unweighted)
-    V : ndarray
-            The variance vector (for standardized Euclidean).
-    VI : ndarray
+    V : ndarray, optional
+        The variance vector (for standardized Euclidean).
+    VI : ndarray, optional
         The inverse of the covariance matrix (for Mahalanobis).
 
     Returns
@@ -1238,8 +1240,9 @@ def pdist(X, metric='euclidean', p=2, w=None, V=None, VI=None):
         elif mstr in set(['minkowski', 'mi', 'm']):
             _distance_wrap.pdist_minkowski_wrap(_convert_to_double(X), dm, p)
         elif mstr in wmink_names:
+            w = _convert_to_double(np.asarray(w))
             _distance_wrap.pdist_weighted_minkowski_wrap(_convert_to_double(X),
-                                                         dm, p, np.asarray(w))
+                                                         dm, p, w)
         elif mstr in set(['seuclidean', 'se', 's']):
             if V is not None:
                 V = np.asarray(V, order='c')
@@ -1259,15 +1262,11 @@ def pdist(X, metric='euclidean', p=2, w=None, V=None, VI=None):
             else:
                 VV = np.var(X, axis=0, ddof=1)
             _distance_wrap.pdist_seuclidean_wrap(_convert_to_double(X), VV, dm)
-        # Need to test whether vectorized cosine works better.
-        # Find out: Is there a dot subtraction operator so I can
-        # subtract matrices in a similar way to multiplying them?
-        # Need to get rid of as much unnecessary C code as possible.
         elif mstr in set(['cosine', 'cos']):
-            norms = np.sqrt(np.sum(X * X, axis=1))
+            norms = _row_norms(X)
             _distance_wrap.pdist_cosine_wrap(_convert_to_double(X), dm, norms)
         elif mstr in set(['old_cosine', 'old_cos']):
-            norms = np.sqrt(np.sum(X * X, axis=1))
+            norms = _row_norms(X)
             nV = norms.reshape(m, 1)
             # The numerator u * v
             nm = np.dot(X, X.T)
@@ -1278,8 +1277,7 @@ def pdist(X, metric='euclidean', p=2, w=None, V=None, VI=None):
             dm = squareform(dm)
         elif mstr in set(['correlation', 'co']):
             X2 = X - X.mean(1)[:, np.newaxis]
-            #X2 = X - np.matlib.repmat(np.mean(X, axis=1).reshape(m, 1), 1, n)
-            norms = np.sqrt(np.sum(X2 * X2, axis=1))
+            norms = _row_norms(X2)
             _distance_wrap.pdist_cosine_wrap(_convert_to_double(X2),
                                              _convert_to_double(dm),
                                              _convert_to_double(norms))
@@ -1472,7 +1470,6 @@ def squareform(X, force="no", checks=True):
         _distance_wrap.to_squareform_from_vector_wrap(M, X)
 
         # Return the distance matrix.
-        M = M + M.transpose()
         return M
     elif len(s) == 2:
         if s[0] != s[1]:
@@ -1614,7 +1611,7 @@ def is_valid_y(y, warning=False, throw=False, name=None):
         condensed distance matrix. The warning message explains why
         the distance matrix is not valid.  `name` is used when
         referencing the offending variable.
-    throws : throw, optional
+    throw : bool, optional
         Throws an exception if the variable passed is not a valid
         condensed distance matrix.
     name : bool, optional
@@ -1715,6 +1712,26 @@ def num_obs_y(Y):
         raise ValueError("Invalid condensed distance matrix passed. Must be "
                          "some k where k=(n choose 2) for some n >= 2.")
     return d
+
+
+def _row_norms(X):
+    norms = np.einsum('ij,ij->i', X, X)
+    return np.sqrt(norms, out=norms)
+
+
+def _cosine_cdist(XA, XB, dm):
+    XA = _convert_to_double(XA)
+    XB = _convert_to_double(XB)
+
+    normsA = _row_norms(XA)
+    normsB = _row_norms(XB)
+
+    np.dot(XA, XB.T, out=dm)
+
+    dm /= normsA.reshape(-1, 1)
+    dm /= normsB
+    dm *= -1
+    dm += 1
 
 
 def cdist(XA, XB, metric='euclidean', p=2, V=None, VI=None, w=None):
@@ -2104,28 +2121,14 @@ def cdist(XA, XB, metric='euclidean', p=2, V=None, VI=None, w=None):
                 del X
             _distance_wrap.cdist_seuclidean_wrap(_convert_to_double(XA),
                                                  _convert_to_double(XB), VV, dm)
-        # Need to test whether vectorized cosine works better.
-        # Find out: Is there a dot subtraction operator so I can
-        # subtract matrices in a similar way to multiplying them?
-        # Need to get rid of as much unnecessary C code as possible.
         elif mstr in set(['cosine', 'cos']):
-            normsA = np.sqrt(np.sum(XA * XA, axis=1))
-            normsB = np.sqrt(np.sum(XB * XB, axis=1))
-            _distance_wrap.cdist_cosine_wrap(_convert_to_double(XA),
-                                             _convert_to_double(XB), dm,
-                                             normsA,
-                                             normsB)
+            _cosine_cdist(XA, XB, dm)
         elif mstr in set(['correlation', 'co']):
-            XA2 = XA - XA.mean(1)[:, np.newaxis]
-            XB2 = XB - XB.mean(1)[:, np.newaxis]
-            #X2 = X - np.matlib.repmat(np.mean(X, axis=1).reshape(m, 1), 1, n)
-            normsA = np.sqrt(np.sum(XA2 * XA2, axis=1))
-            normsB = np.sqrt(np.sum(XB2 * XB2, axis=1))
-            _distance_wrap.cdist_cosine_wrap(_convert_to_double(XA2),
-                                             _convert_to_double(XB2),
-                                             _convert_to_double(dm),
-                                             _convert_to_double(normsA),
-                                             _convert_to_double(normsB))
+            XA = np.array(XA, dtype=np.double, copy=True)
+            XB = np.array(XB, dtype=np.double, copy=True)
+            XA -= XA.mean(axis=1)[:, np.newaxis]
+            XB -= XB.mean(axis=1)[:, np.newaxis]
+            _cosine_cdist(XA, XB, dm)
         elif mstr in set(['mahalanobis', 'mahal', 'mah']):
             if VI is not None:
                 VI = _convert_to_double(np.asarray(VI, order='c'))
@@ -2209,8 +2212,6 @@ def cdist(XA, XB, metric='euclidean', p=2, V=None, VI=None, w=None):
             dm = cdist(XA, XB, minkowski, p=p)
         elif metric == 'test_wminkowski':
             dm = cdist(XA, XB, wminkowski, p=p, w=w)
-        elif metric == 'test_cosine':
-            dm = cdist(XA, XB, cosine)
         elif metric == 'test_correlation':
             dm = cdist(XA, XB, correlation)
         elif metric == 'test_hamming':

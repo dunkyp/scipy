@@ -90,7 +90,7 @@ def differential_evolution(func, bounds, args=(), strategy='best1bin',
         Specify `seed` for repeatable minimizations.
     disp : bool, optional
         Display status messages
-    callback : callable, `callback(xk, convergence=val)`, optional:
+    callback : callable, `callback(xk, convergence=val)`, optional
         A function to follow the progress of the minimization. ``xk`` is
         the current value of ``x0``. ``val`` represents the fractional
         value of the population convergence.  When ``val`` is greater than one
@@ -399,7 +399,8 @@ class DifferentialEvolutionSolver(object):
 
         # Fill points uniformly in each interval
         rdrange = rng.rand(samples, N) * segsize
-        rdrange += np.atleast_2d(np.arange(0., 1., segsize)).T
+        rdrange += np.atleast_2d(
+            np.linspace(0., 1., samples, endpoint=False)).T
 
         # Make the random pairings
         self.population = np.zeros_like(rdrange)
@@ -475,7 +476,7 @@ class DifferentialEvolutionSolver(object):
                            nfev=nfev,
                            nit=nit,
                            message=status_message,
-                           success=(warning_flag != True))
+                           success=(warning_flag is not True))
 
         # do the optimisation.
         for nit in range(1, self.maxiter + 1):
@@ -536,7 +537,7 @@ class DifferentialEvolutionSolver(object):
             nfev=nfev,
             nit=nit,
             message=status_message,
-            success=(warning_flag != True))
+            success=(warning_flag is not True))
 
         if self.polish:
             result = minimize(self.func,

@@ -14,14 +14,13 @@ from numpy import (shape, sometrue, array, transpose, searchsorted,
 import numpy as np
 import scipy.linalg
 import scipy.special as spec
-from scipy.misc import comb
+from scipy.special import comb
 import math
 import warnings
 import functools
 import operator
 
-from scipy.lib._version import NumpyVersion
-from scipy.lib.six import xrange, integer_types
+from scipy._lib.six import xrange, integer_types
 
 from . import fitpack
 from . import dfitpack
@@ -30,9 +29,6 @@ from .polyint import _Interpolator1D
 from . import _ppoly
 from .fitpack2 import RectBivariateSpline
 from .interpnd import _ndim_coords_from_arrays
-
-
-NUMPY_LT_160 = NumpyVersion(np.__version__) < '1.6.0'
 
 
 def reduce_sometrue(a):
@@ -308,9 +304,6 @@ class interp2d(object):
 
 class interp1d(_Interpolator1D):
     """
-    interp1d(x, y, kind='linear', axis=-1, copy=True, bounds_error=True,
-             fill_value=np.nan, assume_sorted=False)
-
     Interpolate a 1-D function.
 
     `x` and `y` are arrays of values used to approximate some function f:
@@ -350,21 +343,26 @@ class interp1d(_Interpolator1D):
         If False, values of `x` can be in any order and they are sorted first.
         If True, `x` has to be an array of monotonically increasing values.
 
+    Methods
+    -------
+    __call__
+
     See Also
     --------
-    UnivariateSpline : A more recent wrapper of the FITPACK routines.
     splrep, splev
-        Spline interpolation based on FITPACK.
-    interp2d
+        Spline interpolation/smoothing based on FITPACK.
+    UnivariateSpline : An object-oriented wrapper of the FITPACK routines.
+    interp2d : 2-D interpolation
 
     Examples
     --------
+    >>> import matplotlib.pyplot as plt
     >>> from scipy import interpolate
     >>> x = np.arange(0, 10)
     >>> y = np.exp(-x/3.0)
     >>> f = interpolate.interp1d(x, y)
 
-    >>> xnew = np.arange(0,9, 0.1)
+    >>> xnew = np.arange(0, 9, 0.1)
     >>> ynew = f(xnew)   # use interpolation function returned by `interp1d`
     >>> plt.plot(x, y, 'o', xnew, ynew, '-')
     >>> plt.show()
@@ -661,7 +659,7 @@ class _PPolyBase(object):
 
         Parameters
         ----------
-        x : array-like
+        x : array_like
             Points to evaluate the interpolant at.
         nu : int, optional
             Order of derivative to evaluate. Must be non-negative.
@@ -671,7 +669,7 @@ class _PPolyBase(object):
 
         Returns
         -------
-        y : array-like
+        y : array_like
             Interpolated values. Shape is determined by replacing
             the interpolation axis in the original array with the shape of x.
 
@@ -760,7 +758,7 @@ class PPoly(_PPolyBase):
 
         Parameters
         ----------
-        n : int, optional
+        nu : int, optional
             Order of derivative to evaluate. (Default: 1)
             If negative, the antiderivative is returned.
 
@@ -808,7 +806,7 @@ class PPoly(_PPolyBase):
 
         Parameters
         ----------
-        n : int, optional
+        nu : int, optional
             Order of antiderivative to evaluate. (Default: 1)
             If negative, the derivative is returned.
 
@@ -839,7 +837,7 @@ class PPoly(_PPolyBase):
         # fix continuity of added degrees of freedom
         self._ensure_c_contiguous()
         _ppoly.fix_continuity(c.reshape(c.shape[0], c.shape[1], -1),
-                              self.x, nu)
+                              self.x, nu - 1)
 
         # construct a compatible polynomial
         return self.construct_fast(c, self.x, self.extrapolate)
@@ -1191,7 +1189,7 @@ class BPoly(_PPolyBase):
         ----------
         xi : array_like
             sorted 1D array of x-coordinates
-        yi : array_like or list of array-likes
+        yi : array_like or list of array_likes
             ``yi[i][j]`` is the ``j``-th derivative known at ``xi[i]``
         orders : None or int or array_like of ints. Default: None.
             Specifies the degree of local polynomials. If not None, some
@@ -1439,10 +1437,10 @@ class RegularGridInterpolator(object):
     values : array_like, shape (m1, ..., mn, ...)
         The data on the regular grid in n dimensions.
 
-    method : str
+    method : str, optional
         The method of interpolation to perform. Supported are "linear" and
         "nearest". This parameter will become the default for the object's
-        ``__call__`` method.
+        ``__call__`` method. Default is "linear".
 
     bounds_error : bool, optional
         If True, when interpolated values are requested outside of the
@@ -1465,6 +1463,33 @@ class RegularGridInterpolator(object):
     regular grid structure.
 
     .. versionadded:: 0.14
+
+    Examples
+    --------
+    Evaluate a simple example function on the points of a 3D grid:
+
+    >>> from scipy.interpolate import RegularGridInterpolator
+    >>> def f(x,y,z):
+    >>>     return 2 * x**3 + 3 * y**2 - z
+    >>> x = np.linspace(1, 4, 11)
+    >>> y = np.linspace(4, 7, 22)
+    >>> z = np.linspace(7, 9, 33)
+    >>> data = f(*np.meshgrid(x, y, z, indexing='ij', sparse=True))
+
+    ``data`` is now a 3D array with ``data[i,j,k] = f(x[i], y[j], z[k])``.
+    Next, define an interpolating function from this data:
+
+    >>> my_interpolating_function = RegularGridInterpolator((x,y,z), data)
+
+    Evaluate the interpolating function at the two points
+    ``(x,y,z) = (2.1, 6.2, 8.3)`` and ``(3.3, 5.2, 7.1)``:
+
+    >>> pts = np.array([[2.1, 6.2, 8.3], [3.3, 5.2, 7.1]])
+    >>> my_interpolating_function(pts)
+    array([ 125.80469388,  146.30069388])
+
+    which is indeed a close approximation to
+    ``[f(2.1, 6.2, 8.3), f(3.3, 5.2, 7.1)]``.
 
     See also
     --------
@@ -1512,13 +1537,11 @@ class RegularGridInterpolator(object):
         self.fill_value = fill_value
         if fill_value is not None:
             fill_value_dtype = np.asarray(fill_value).dtype
-            if not NUMPY_LT_160:
-                if (hasattr(values,
-                            'dtype') and not np.can_cast(fill_value_dtype,
-                                                         values.dtype,
-                                                         casting='same_kind')):
-                    raise ValueError("fill_value must be either 'None' or "
-                                     "of a type compatible with values")
+            if (hasattr(values, 'dtype')
+                    and not np.can_cast(fill_value_dtype, values.dtype,
+                                        casting='same_kind')):
+                raise ValueError("fill_value must be either 'None' or "
+                                 "of a type compatible with values")
 
         for i, p in enumerate(points):
             if not np.all(np.diff(p) > 0.):
@@ -1636,7 +1659,7 @@ def interpn(points, values, xi, method="linear", bounds_error=True,
     xi : ndarray of shape (..., ndim)
         The coordinates to sample the gridded data at
 
-    method : str
+    method : str, optional
         The method of interpolation to perform. Supported are "linear" and
         "nearest", and "splinef2d". "splinef2d" is only supported for
         2-dimensional data.

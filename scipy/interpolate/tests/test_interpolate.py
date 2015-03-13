@@ -9,8 +9,8 @@ from numpy.testing import (assert_, assert_equal, assert_almost_equal,
 from numpy import mgrid, pi, sin, ogrid, poly1d, linspace
 import numpy as np
 
-from scipy.lib.six import xrange
-from scipy.lib._version import NumpyVersion
+from scipy._lib.six import xrange
+from scipy._lib._version import NumpyVersion
 
 from scipy.interpolate import (interp1d, interp2d, lagrange, PPoly, BPoly,
          ppform, splrep, splev, splantider, splint, sproot, Akima1DInterpolator,
@@ -19,7 +19,7 @@ from scipy.interpolate import (interp1d, interp2d, lagrange, PPoly, BPoly,
 
 from scipy.interpolate import _ppoly
 
-from scipy.lib._gcutils import assert_deallocated
+from scipy._lib._gcutils import assert_deallocated
 
 
 class TestInterp2D(TestCase):
@@ -664,6 +664,21 @@ class TestPPoly(TestCase):
         for dx in range(0, 10):
             assert_allclose(pp(xi, dx), pp.derivative(dx)(xi),
                             err_msg="dx=%d" % (dx,))
+
+    def test_antiderivative_of_constant(self):
+        # https://github.com/scipy/scipy/issues/4216
+        p = PPoly([[1.]], [0, 1])
+        assert_equal(p.antiderivative().c, PPoly([[1], [0]], [0, 1]).c)
+        assert_equal(p.antiderivative().x, PPoly([[1], [0]], [0, 1]).x)
+
+    def test_antiderivative_regression_4355(self):
+        # https://github.com/scipy/scipy/issues/4355
+        p = PPoly([[1., 0.5]], [0, 1, 2])
+        q = p.antiderivative()
+        assert_equal(q.c, [[1, 0.5], [0, 1]])
+        assert_equal(q.x, [0, 1, 2])
+        assert_allclose(p.integrate(0, 2), 1.5)
+        assert_allclose(q(2) - q(0), 1.5)
 
     def test_antiderivative_simple(self):
         np.random.seed(1234)
@@ -1445,9 +1460,8 @@ class TestRegularGridInterpolator(TestCase):
         RegularGridInterpolator((x, y), values, fill_value=1)
 
         # complex values cannot
-        if NumpyVersion(np.__version__) >= '1.6.0':
-            assert_raises(ValueError, RegularGridInterpolator,
-                          (x, y), values, fill_value=1+2j)
+        assert_raises(ValueError, RegularGridInterpolator,
+                      (x, y), values, fill_value=1+2j)
 
     def test_fillvalue_type(self):
         # from #3703; test that interpolator object construction succeeds

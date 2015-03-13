@@ -15,7 +15,7 @@ from nose import SkipTest
 import numpy
 import numpy as np
 from numpy import typecodes, array
-from scipy.lib._version import NumpyVersion
+from scipy._lib._version import NumpyVersion
 from scipy import special
 import scipy.stats as stats
 from scipy.stats._distn_infrastructure import argsreduce
@@ -33,8 +33,8 @@ DOCSTRINGS_STRIPPED = sys.flags.optimize > 1
 dists = ['uniform','norm','lognorm','expon','beta',
          'powerlaw','bradford','burr','fisk','cauchy','halfcauchy',
          'foldcauchy','gamma','gengamma','loggamma',
-         'alpha','anglit','arcsine','betaprime',
-         'dgamma','exponweib','exponpow','frechet_l','frechet_r',
+         'alpha','anglit','arcsine','betaprime','dgamma',
+         'exponnorm', 'exponweib','exponpow','frechet_l','frechet_r',
          'gilbrat','f','ncf','chi2','chi','nakagami','genpareto',
          'genextreme','genhalflogistic','pareto','lomax','halfnorm',
          'halflogistic','fatiguelife','foldnorm','ncx2','t','nct',
@@ -238,6 +238,9 @@ class TestNBinom(TestCase):
         # regression test for ticket 1779
         assert_allclose(np.exp(stats.nbinom.logpmf(700, 721, 0.52)),
                         stats.nbinom.pmf(700, 721, 0.52))
+        # logpmf(0,1,1) shouldn't return nan (regression test for gh-4029)
+        val = scipy.stats.nbinom.logpmf(0,1,1)
+        assert_equal(val,0)
 
 
 class TestGeom(TestCase):
@@ -261,6 +264,10 @@ class TestGeom(TestCase):
         vals1 = np.log(stats.geom.pmf([1,2,3], 0.5))
         vals2 = stats.geom.logpmf([1,2,3], 0.5)
         assert_allclose(vals1, vals2, rtol=1e-15, atol=0)
+
+        # regression test for gh-4028
+        val = stats.geom.logpmf(1, 1)
+        assert_equal(val, 0.0)
 
     def test_cdf_sf(self):
         vals = stats.geom.cdf([1, 2, 3], 0.5)
@@ -341,6 +348,15 @@ class TestHypergeom(TestCase):
         good = n
         hgpmf = stats.hypergeom.pmf(2, tot, good, N)
         assert_almost_equal(hgpmf, 0.0010114963068932233, 11)
+
+    def test_args(self):
+        # test correct output for corner cases of arguments
+        # see gh-2325
+        assert_almost_equal(stats.hypergeom.pmf(0, 2, 1, 0), 1.0, 11)
+        assert_almost_equal(stats.hypergeom.pmf(1, 2, 1, 0), 0.0, 11)
+
+        assert_almost_equal(stats.hypergeom.pmf(0, 2, 0, 2), 1.0, 11)
+        assert_almost_equal(stats.hypergeom.pmf(1, 2, 1, 0), 0.0, 11)
 
     def test_cdf_above_one(self):
         # for some values of parameters, hypergeom cdf was >1, see gh-2238
@@ -512,7 +528,7 @@ class TestGenpareto(TestCase):
         assert_allclose(rv.logpdf(1), 0)
 
     def test_x_inf(self):
-        # make sure x=inf is handled gracefully 
+        # make sure x=inf is handled gracefully
         rv = stats.genpareto(c=0.1)
         assert_allclose([rv.pdf(np.inf), rv.cdf(np.inf)], [0., 1.])
         assert_(np.isneginf(rv.logpdf(np.inf)))
@@ -759,6 +775,40 @@ class TestExpon(TestCase):
         assert_equal(stats.expon.cdf(1e-18), 1e-18)
         assert_equal(stats.expon.isf(stats.expon.sf(40)), 40)
 
+        
+class TestExponNorm(TestCase):
+    def test_moments(self):
+        # Some moment test cases based on non-loc/scaled formula
+        def get_moms(lam, sig, mu):
+            # See wikipedia for these formulae
+            #  where it is listed as an exponentially modified gaussian
+            opK2 = 1.0 + 1 / (lam*sig)**2
+            exp_skew = 2 / (lam * sig)**3 * opK2**(-1.5)
+            exp_kurt = 6.0 * (1 + (lam * sig)**2)**(-2)
+            return [mu + 1/lam, sig*sig + 1.0/(lam*lam), exp_skew, exp_kurt] 
+
+        mu, sig, lam = 0, 1, 1        
+        K = 1.0 / (lam * sig)
+        sts = stats.exponnorm.stats(K, loc=mu, scale=sig, moments='mvsk')
+        assert_almost_equal(sts, get_moms(lam, sig, mu))
+        mu, sig, lam = -3, 2, 0.1
+        K = 1.0 / (lam * sig)
+        sts = stats.exponnorm.stats(K, loc=mu, scale=sig, moments='mvsk')
+        assert_almost_equal(sts, get_moms(lam, sig, mu))
+        mu, sig, lam = 0, 3, 1
+        K = 1.0 / (lam * sig)
+        sts = stats.exponnorm.stats(K, loc=mu, scale=sig, moments='mvsk')
+        assert_almost_equal(sts, get_moms(lam, sig, mu))
+        mu, sig, lam = -5, 11, 3.5
+        K = 1.0 / (lam * sig)
+        sts = stats.exponnorm.stats(K, loc=mu, scale=sig, moments='mvsk')
+        assert_almost_equal(sts, get_moms(lam, sig, mu))
+        
+    def test_extremes_x(self):
+        # Test for extreme values against overflows
+        assert_almost_equal(stats.exponnorm.pdf(-900, 1), 0.0)
+        assert_almost_equal(stats.exponnorm.pdf(+900, 1), 0.0)
+
 
 class TestGenExpon(TestCase):
     def test_pdf_unity_area(self):
@@ -856,6 +906,21 @@ class TestBetaPrime(TestCase):
         assert_(np.isfinite(b.logpdf(x)).all())
         assert_allclose(b.pdf(x), np.exp(b.logpdf(x)))
 
+    def test_cdf(self):
+        # regression test for gh-4030: Implementation of 
+        # scipy.stats.betaprime.cdf()
+        x = stats.betaprime.cdf(0, 0.2, 0.3)
+        assert_equal(x, 0.0)
+
+        alpha, beta = 267, 1472
+        x = np.array([0.2, 0.5, 0.6])
+        cdfs = stats.betaprime.cdf(x, alpha, beta)
+        assert_(np.isfinite(cdfs).all())
+        
+        # check the new cdf implementation vs generic one:
+        gen_cdf = stats.rv_continuous._cdf_single
+        cdfs_g = [gen_cdf(stats.betaprime, val, alpha, beta) for val in x]
+        assert_allclose(cdfs, cdfs_g, atol=0, rtol=2e-12)
 
 class TestGamma(TestCase):
     def test_pdf(self):
@@ -1189,6 +1254,9 @@ class TestFrozen(TestCase):
         result = dist.moment(2,loc=10.0, scale=3.0)
         assert_equal(result_f, result)
 
+        assert_equal(frozen.a, dist.a)
+        assert_equal(frozen.b, dist.b)
+
     def test_gamma(self):
         a = 2.0
         dist = stats.gamma
@@ -1238,6 +1306,9 @@ class TestFrozen(TestCase):
         result = dist.moment(2, a)
         assert_equal(result_f, result)
 
+        assert_equal(frozen.a, frozen.dist.a)
+        assert_equal(frozen.b, frozen.dist.b)
+
     def test_regression_ticket_1293(self):
         # Create a frozen distribution.
         frozen = stats.lognorm(1)
@@ -1265,9 +1336,11 @@ class TestFrozen(TestCase):
         rv = stats.genpareto(c=-0.1)
         a, b = rv.dist.a, rv.dist.b
         assert_equal([a, b], [0., 10.])
+        assert_equal([rv.a, rv.b], [0., 10.])
 
         stats.genpareto.pdf(0, c=0.1)  # this changes genpareto.b
         assert_equal([rv.dist.a, rv.dist.b], [a, b])
+        assert_equal([rv.a, rv.b], [a, b])
 
         rv1 = stats.genpareto(c=0.1)
         assert_(rv1.dist is not rv.dist)
@@ -1275,6 +1348,37 @@ class TestFrozen(TestCase):
     def test_rv_frozen_in_namespace(self):
         # Regression test for gh-3522
         assert_(hasattr(stats.distributions, 'rv_frozen'))
+
+    def test_random_state(self):
+        # only check that the random_state attribute exists,
+        frozen = stats.norm()
+        assert_(hasattr(frozen, 'random_state'))
+
+        # ... that it can be set,
+        frozen.random_state = 42
+        assert_equal(frozen.random_state.get_state(),
+                     np.random.RandomState(42).get_state())
+
+        # ... and that .rvs method accepts it as an argument
+        rndm = np.random.RandomState(1234)
+        frozen.rvs(size=8, random_state=rndm)
+
+    def test_expect(self):
+        # smoke test the expect method of the frozen distribution
+        # only take a gamma w/loc and scale and poisson with loc specified
+        def func(x):
+            return x
+
+        gm = stats.gamma(a=2, loc=3, scale=4)
+        gm_val = gm.expect(func, lb=1, ub=2, conditional=True)
+        gamma_val = stats.gamma.expect(func, args=(2,), loc=3, scale=4,
+                                       lb=1, ub=2, conditional=True)
+        assert_allclose(gm_val, gamma_val)
+
+        p = stats.poisson(3, loc=4)
+        p_val = p.expect(func)
+        poisson_val = stats.poisson.expect(func, args=(3,), loc=4)
+        assert_allclose(p_val, poisson_val)
 
 
 class TestExpect(TestCase):
@@ -1870,7 +1974,7 @@ def test_stats_shapes_argcheck():
     # anyway, so some distributions may or may not fail.
 
 
-## Test subclassing distributions w/ explicit shapes
+# Test subclassing distributions w/ explicit shapes
 
 class _distr_gen(stats.rv_continuous):
     def _pdf(self, x, a):
@@ -2098,6 +2202,25 @@ def test_infinite_input():
     assert_almost_equal(stats.skellam.sf(np.inf, 10, 11), 0)
     assert_almost_equal(stats.ncx2._cdf(np.inf, 8, 0.1), 1)
 
+def test_lomax_accuracy():
+    # regression test for gh-4033
+    p = stats.lomax.ppf(stats.lomax.cdf(1e-100,1),1)
+    assert_allclose(p, 1e-100)
+    
+def test_gompertz_accuracy():
+    # Regression test for gh-4031
+    p = stats.gompertz.ppf(stats.gompertz.cdf(1e-100,1),1)
+    assert_allclose(p, 1e-100)
+    
+def test_truncexpon_accuracy():
+    # regression test for gh-4035
+    p = stats.truncexpon.ppf(stats.truncexpon.cdf(1e-100,1),1)
+    assert_allclose(p, 1e-100)
+
+def test_rayleigh_accuracy():
+    # regression test for gh-4034
+    p = stats.rayleigh.isf(stats.rayleigh.sf(9,1),1)
+    assert_almost_equal(p, 9.0, decimal=15)
 
 if __name__ == "__main__":
     run_module_suite()

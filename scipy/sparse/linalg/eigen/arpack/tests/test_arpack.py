@@ -11,19 +11,19 @@ import warnings
 import numpy as np
 
 from numpy.testing import assert_allclose, \
-        assert_array_almost_equal_nulp, TestCase, run_module_suite, dec, \
-        assert_raises, verbose, assert_equal, assert_array_equal
+        assert_array_almost_equal_nulp, run_module_suite, \
+        assert_raises, assert_equal, assert_array_equal
 
-from numpy import array, finfo, argsort, dot, round, conj, random
+from numpy import dot, conj, random
 from scipy.linalg import eig, eigh
-from scipy.sparse import csc_matrix, csr_matrix, lil_matrix, isspmatrix
+from scipy.sparse import csc_matrix, csr_matrix, isspmatrix
 from scipy.sparse.linalg import LinearOperator, aslinearoperator
 from scipy.sparse.linalg.eigen.arpack import eigs, eigsh, svds, \
      ArpackNoConvergence, arpack
 
 from scipy.linalg import svd, hilbert
 
-from scipy.lib._gcutils import assert_deallocated
+from scipy._lib._gcutils import assert_deallocated
 
 
 # eigs() and eigsh() are called many times, so apply a filter for the warnings
@@ -211,7 +211,6 @@ def eval_evec(symmetric, d, typ, k, which, v0=None, sigma=None,
     exact_eval = d['eval'].astype(typ.upper())
     ind = argsort_which(exact_eval, typ, k, which,
                         sigma, OPpart, mode)
-    exact_eval_a = exact_eval
     exact_eval = exact_eval[ind]
 
     # compute arpack eigenvalues
@@ -247,7 +246,6 @@ def eval_evec(symmetric, d, typ, k, which, v0=None, sigma=None,
 
         ind = argsort_which(eval, typ, k, which,
                             sigma, OPpart, mode)
-        eval_a = eval
         eval = eval[ind]
         evec = evec[:,ind]
 
@@ -712,6 +710,77 @@ def test_svd_LM_zeros_matrix_gh_3452():
     assert_array_equal(s, 0)
 
 
+class CheckingLinearOperator(LinearOperator):
+    def __init__(self, A):
+        self.A = A
+        self.dtype = A.dtype
+        self.shape = A.shape
+
+    def _matvec(self, x):
+        assert_equal(max(x.shape), np.size(x))
+        return self.A.dot(x)
+
+    def _rmatvec(self, x):
+        assert_equal(max(x.shape), np.size(x))
+        return self.A.T.conjugate().dot(x)
+
+
+def test_svd_linop():
+    nmks = [(6, 7, 3),
+            (9, 5, 4),
+            (10, 8, 5)]
+
+    def reorder(args):
+        U, s, VH = args
+        j = np.argsort(s)
+        return U[:,j], s[j], VH[j,:]
+
+    for n, m, k in nmks:
+        # Test svds on a LinearOperator.
+        A = np.random.RandomState(52).randn(n, m)
+        L = CheckingLinearOperator(A)
+
+        v0 = np.ones(min(A.shape))
+
+        U1, s1, VH1 = reorder(svds(A, k, v0=v0))
+        U2, s2, VH2 = reorder(svds(L, k, v0=v0))
+
+        assert_allclose(np.abs(U1), np.abs(U2))
+        assert_allclose(s1, s2)
+        assert_allclose(np.abs(VH1), np.abs(VH2))
+        assert_allclose(np.dot(U1, np.dot(np.diag(s1), VH1)),
+                        np.dot(U2, np.dot(np.diag(s2), VH2)))
+
+        # Try again with which="SM".
+        A = np.random.RandomState(1909).randn(n, m)
+        L = CheckingLinearOperator(A)
+
+        U1, s1, VH1 = reorder(svds(A, k, which="SM"))
+        U2, s2, VH2 = reorder(svds(L, k, which="SM"))
+
+        assert_allclose(np.abs(U1), np.abs(U2))
+        assert_allclose(s1, s2)
+        assert_allclose(np.abs(VH1), np.abs(VH2))
+        assert_allclose(np.dot(U1, np.dot(np.diag(s1), VH1)),
+                        np.dot(U2, np.dot(np.diag(s2), VH2)))
+
+        if k < min(n, m) - 1:
+            # Complex input and explicit which="LM".
+            for (dt, eps) in [(complex, 1e-7), (np.complex64, 1e-3)]:
+                rng = np.random.RandomState(1648)
+                A = (rng.randn(n, m) + 1j * rng.randn(n, m)).astype(dt)
+                L = CheckingLinearOperator(A)
+
+                U1, s1, VH1 = reorder(svds(A, k, which="LM"))
+                U2, s2, VH2 = reorder(svds(L, k, which="LM"))
+
+                assert_allclose(np.abs(U1), np.abs(U2), rtol=eps)
+                assert_allclose(s1, s2, rtol=eps)
+                assert_allclose(np.abs(VH1), np.abs(VH2), rtol=eps)
+                assert_allclose(np.dot(U1, np.dot(np.diag(s1), VH1)),
+                                np.dot(U2, np.dot(np.diag(s2), VH2)), rtol=eps)
+
+
 def test_linearoperator_deallocation():
     # Check that the linear operators used by the Arpack wrappers are
     # deallocatable by reference counting -- they are big objects, so
@@ -721,7 +790,6 @@ def test_linearoperator_deallocation():
     M_d = np.eye(10)
     M_s = csc_matrix(M_d)
     M_o = aslinearoperator(M_d)
-    v = np.ones(10)
 
     with assert_deallocated(lambda: arpack.SpLuInv(M_s)):
         pass
@@ -733,6 +801,31 @@ def test_linearoperator_deallocation():
         pass
     with assert_deallocated(lambda: arpack.IterOpInv(M_o, M_o, 0.3)):
         pass
+
+
+def test_svds_partial_return():
+    x = np.array([[1, 2, 3],
+                  [3, 4, 3],
+                  [1, 0, 2],
+                  [0, 0, 1]], np.float)
+    # test vertical matrix
+    z = csr_matrix(x)
+    vh_full = svds(z, 2)[-1]
+    vh_partial = svds(z, 2, return_singular_vectors='vh')[-1]
+    dvh = np.linalg.norm(np.abs(vh_full) - np.abs(vh_partial))
+    if dvh > 1e-10:
+        raise AssertionError('right eigenvector matrices differ when using return_singular_vectors parameter')
+    if svds(z, 2, return_singular_vectors='vh')[0] is not None:
+        raise AssertionError('left eigenvector matrix was computed when it should not have been')
+    # test horizontal matrix
+    z = csr_matrix(x.T)
+    u_full = svds(z, 2)[0]
+    u_partial = svds(z, 2, return_singular_vectors='vh')[0]
+    du = np.linalg.norm(np.abs(u_full) - np.abs(u_partial))
+    if du > 1e-10:
+        raise AssertionError('left eigenvector matrices differ when using return_singular_vectors parameter')
+    if svds(z, 2, return_singular_vectors='u')[-1] is not None:
+        raise AssertionError('right eigenvector matrix was computed when it should not have been')
 
 
 if __name__ == "__main__":

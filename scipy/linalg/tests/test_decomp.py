@@ -17,7 +17,7 @@ from numpy.testing import (TestCase, assert_equal, assert_array_almost_equal,
         assert_array_equal, assert_raises, assert_, assert_allclose,
         run_module_suite, dec)
 
-from scipy.lib.six import xrange
+from scipy._lib.six import xrange
 
 from scipy.linalg import (eig, eigvals, lu, svd, svdvals, cholesky, qr,
      schur, rsf2csf, lu_solve, lu_factor, solve, diagsvd, hessenberg, rq,
@@ -583,16 +583,25 @@ def test_eigh():
         for typ in v['dtype']:
             for overwrite in v['overwrite']:
                 for turbo in v['turbo']:
-                    for eigenvals in v['eigvals']:
+                    for eigenvalues in v['eigvals']:
                         for lower in v['lower']:
                             yield (eigenhproblem_standard,
                                    'ordinary',
                                    dim, typ, overwrite, lower,
-                                   turbo, eigenvals)
+                                   turbo, eigenvalues)
                             yield (eigenhproblem_general,
                                    'general ',
                                    dim, typ, overwrite, lower,
-                                   turbo, eigenvals)
+                                   turbo, eigenvalues)
+
+
+def test_eigh_of_sparse():
+    # This tests the rejection of inputs that eigh cannot currently handle.
+    import scipy.sparse
+    a = scipy.sparse.identity(2).tocsc()
+    b = np.atleast_2d(a)
+    assert_raises(ValueError, eigh, a)
+    assert_raises(ValueError, eigh, b)
 
 
 def _complex_symrand(dim, dtype):
@@ -604,7 +613,7 @@ def _complex_symrand(dim, dtype):
 
 def eigenhproblem_standard(desc, dim, dtype,
                            overwrite, lower, turbo,
-                           eigvals):
+                           eigenvalues):
     """Solve a standard eigenvalue problem."""
     if iscomplex(empty(1, dtype=dtype)):
         a = _complex_symrand(dim, dtype)
@@ -615,7 +624,7 @@ def eigenhproblem_standard(desc, dim, dtype,
         a_c = a.copy()
     else:
         a_c = a
-    w, z = eigh(a, overwrite_a=overwrite, lower=lower, eigvals=eigvals)
+    w, z = eigh(a, overwrite_a=overwrite, lower=lower, eigvals=eigenvalues)
     assert_dtype_equal(z.dtype, dtype)
     w = w.astype(dtype)
     diag_ = diag(dot(z.T.conj(), dot(a_c, z))).real
@@ -624,7 +633,7 @@ def eigenhproblem_standard(desc, dim, dtype,
 
 def eigenhproblem_general(desc, dim, dtype,
                           overwrite, lower, turbo,
-                          eigvals):
+                          eigenvalues):
     """Solve a generalized eigenvalue problem."""
     if iscomplex(empty(1, dtype=dtype)):
         a = _complex_symrand(dim, dtype)
@@ -639,7 +648,7 @@ def eigenhproblem_general(desc, dim, dtype,
         a_c, b_c = a, b
 
     w, z = eigh(a, b, overwrite_a=overwrite, lower=lower,
-                overwrite_b=overwrite, turbo=turbo, eigvals=eigvals)
+                overwrite_b=overwrite, turbo=turbo, eigvals=eigenvalues)
     assert_dtype_equal(z.dtype, dtype)
     w = w.astype(dtype)
     diag1_ = diag(dot(z.T.conj(), dot(a_c, z))).real
@@ -957,24 +966,6 @@ class TestQR(TestCase):
         q,r = qr(a)
         assert_array_almost_equal(dot(transpose(q),q),identity(3))
         assert_array_almost_equal(dot(q,r),a)
-
-    def test_simple_left(self):
-        a = [[8,2,3],[2,9,3],[5,3,6]]
-        q,r = qr(a)
-        c = [1, 2, 3]
-        qc,r = qr_multiply(a, mode="left", c=c)
-        assert_array_almost_equal(dot(q, c), qc[:, 0])
-        qc,r = qr_multiply(a, mode="left", c=identity(3))
-        assert_array_almost_equal(q, qc)
-
-    def test_simple_right(self):
-        a = [[8,2,3],[2,9,3],[5,3,6]]
-        q,r = qr(a)
-        c = [1, 2, 3]
-        qc,r = qr_multiply(a, mode="right", c=c)
-        assert_array_almost_equal(dot(c, q), qc[0, :])
-        qc,r = qr_multiply(a, mode="right", c=identity(3))
-        assert_array_almost_equal(q, qc)
 
     def test_simple_left(self):
         a = [[8,2,3],[2,9,3],[5,3,6]]
@@ -1482,6 +1473,29 @@ class TestQR(TestCase):
         assert_array_almost_equal(dot(transpose(q),q),identity(3))
         assert_array_almost_equal(dot(q,r),a)
 
+    def test_lwork(self):
+        a = [[8,2,3],[2,9,3],[5,3,6]]
+        # Get comparison values
+        q,r = qr(a, lwork=None)
+
+        # Test against minimum valid lwork
+        q2,r2 = qr(a, lwork=3)
+        assert_array_almost_equal(q2,q)
+        assert_array_almost_equal(r2,r)
+
+        # Test against larger lwork
+        q3,r3 = qr(a, lwork=10)
+        assert_array_almost_equal(q3,q)
+        assert_array_almost_equal(r3,r)
+
+        # Test against explicit lwork=-1
+        q4,r4 = qr(a, lwork=-1)
+        assert_array_almost_equal(q4,q)
+        assert_array_almost_equal(r4,r)
+
+        # Test against invalid lwork
+        assert_raises(Exception, qr, (a,), {'lwork':0})
+        assert_raises(Exception, qr, (a,), {'lwork':2})
 
 class TestRQ(TestCase):
 
@@ -1746,6 +1760,18 @@ class TestHessenberg(TestCase):
         assert_array_almost_equal(dot(transp(q),dot(a,q)),h)
         assert_array_almost_equal(h,h1,decimal=4)
 
+    def test_2x2(self):
+        a = [[2, 1], [7, 12]]
+
+        h, q = hessenberg(a, calc_q=1)
+        assert_array_almost_equal(q, np.eye(2))
+        assert_array_almost_equal(h, a)
+
+        b = [[2-7j, 1+2j], [7+3j, 12-2j]]
+        h2, q2 = hessenberg(b, calc_q=1)
+        assert_array_almost_equal(q2, np.eye(2))
+        assert_array_almost_equal(h2, b)
+
 
 class TestQZ(TestCase):
     def setUp(self):
@@ -1945,9 +1971,6 @@ class TestDatacopied(TestCase):
         F1 = Fake1()
         F2 = Fake2()
 
-        AF1 = asarray(F1)
-        AF2 = asarray(F2)
-
         for item, status in [(M, False), (A, False), (L, True),
                              (M2, False), (F1, False), (F2, False)]:
             arr = asarray(item)
@@ -2021,7 +2044,6 @@ def test_lapack_misaligned():
     S = np.frombuffer(S.data, offset=4, count=100, dtype=np.float)
     S.shape = 10, 10
     b = np.ones(10)
-    v = np.ones(3,dtype=float)
     LU, piv = lu_factor(S)
     for (func, args, kwargs) in [
             (eig,(S,),dict(overwrite_a=True)),  # crash
@@ -2120,7 +2142,7 @@ def test_orth_memory_efficiency():
     n = 10*1000*1000
     try:
         _check_orth(n)
-    except MemoryError as e:
+    except MemoryError:
         raise AssertionError('memory error perhaps caused by orth regression')
 
 

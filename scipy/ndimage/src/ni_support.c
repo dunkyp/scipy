@@ -111,7 +111,7 @@ int NI_AllocateLineBuffer(PyArrayObject* array, int axis, npy_intp size1,
     if (*lines > max_lines)
         *lines = max_lines;
     /* allocate data for the buffer: */
-    *buffer = (double*)malloc(*lines * line_size);
+    *buffer = malloc(*lines * line_size);
     if (!*buffer) {
         PyErr_NoMemory();
         return 0;
@@ -515,15 +515,14 @@ int NI_InitFilterOffsets(PyArrayObject *array, Bool *footprint,
     for(ii = 0; ii < rank; ii++)
         offsets_size *= (ashape[ii] < fshape[ii] ? ashape[ii] : fshape[ii]);
     /* allocate offsets data: */
-    *offsets = (npy_intp*)malloc(offsets_size * footprint_size *
-                                                        sizeof(npy_intp));
+    *offsets = malloc(offsets_size * footprint_size * sizeof(npy_intp));
     if (!*offsets) {
         PyErr_NoMemory();
         goto exit;
     }
     if (coordinate_offsets) {
-        *coordinate_offsets = (npy_intp*)malloc(offsets_size * rank *
-                                        footprint_size * sizeof(npy_intp));
+        *coordinate_offsets = malloc(offsets_size * rank
+                                     * footprint_size * sizeof(npy_intp));
         if (!*coordinate_offsets) {
             PyErr_NoMemory();
             goto exit;
@@ -694,10 +693,10 @@ int NI_InitFilterOffsets(PyArrayObject *array, Bool *footprint,
 
  exit:
     if (PyErr_Occurred()) {
-        if (*offsets)
-            free(*offsets);
-        if (coordinate_offsets && *coordinate_offsets)
+        free(*offsets);
+        if (coordinate_offsets) {
             free(*coordinate_offsets);
+        }
         return 0;
     } else {
         return 1;
@@ -706,10 +705,8 @@ int NI_InitFilterOffsets(PyArrayObject *array, Bool *footprint,
 
 NI_CoordinateList* NI_InitCoordinateList(int size, int rank)
 {
-    NI_CoordinateList *list = \
-        (NI_CoordinateList*)malloc(sizeof(NI_CoordinateList));
+    NI_CoordinateList *list = malloc(sizeof(NI_CoordinateList));
     if (!list) {
-        PyErr_NoMemory();
         return NULL;
     }
     list->block_size = size;
@@ -738,27 +735,20 @@ int NI_CoordinateListStealBlocks(NI_CoordinateList *list1,
 NI_CoordinateBlock* NI_CoordinateListAddBlock(NI_CoordinateList *list)
 {
     NI_CoordinateBlock* block = NULL;
-    block = (NI_CoordinateBlock*)malloc(sizeof(NI_CoordinateBlock));
+    block = malloc(sizeof(NI_CoordinateBlock));
     if (!block) {
-        PyErr_NoMemory();
-        goto exit;
+        return NULL;
     }
-    block->coordinates = (npy_intp*)malloc(list->block_size * list->rank *
-                                                           sizeof(npy_intp));
+    block->coordinates = malloc(list->block_size * list->rank
+                                * sizeof(npy_intp));
     if (!block->coordinates) {
-        PyErr_NoMemory();
-        goto exit;
+        free(block);
+        return NULL;
     }
     block->next = list->blocks;
     list->blocks = block;
     block->size = 0;
 
-exit:
-    if (PyErr_Occurred()) {
-        if (block)
-            free(block);
-        return NULL;
-    }
     return block;
 }
 
@@ -767,8 +757,7 @@ NI_CoordinateBlock* NI_CoordinateListDeleteBlock(NI_CoordinateList *list)
     NI_CoordinateBlock* block = list->blocks;
     if (block) {
         list->blocks = block->next;
-        if (block->coordinates)
-            free(block->coordinates);
+        free(block->coordinates);
         free(block);
     }
     return list->blocks;
@@ -781,8 +770,7 @@ void NI_FreeCoordinateList(NI_CoordinateList *list)
         while (block) {
             NI_CoordinateBlock *tmp = block;
             block = block->next;
-            if (tmp->coordinates)
-                free(tmp->coordinates);
+            free(tmp->coordinates);
             free(tmp);
         }
         list->blocks = NULL;

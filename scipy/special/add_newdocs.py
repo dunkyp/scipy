@@ -57,6 +57,16 @@ add_newdoc("scipy.special", "sph_harm",
     .. [1] Digital Library of Mathematical Functions, 14.30. http://dlmf.nist.gov/14.30
     """)
 
+add_newdoc("scipy.special", "_ellip_harm",
+    """
+    Internal function, use `ellip_harm` instead.
+    """)
+
+add_newdoc("scipy.special", "_ellip_norm",
+    """
+    Internal function, use `ellip_norm` instead.
+    """)
+
 add_newdoc("scipy.special", "_lambertw",
     """
     Internal function, use `lambertw` instead.
@@ -372,10 +382,80 @@ add_newdoc("scipy.special", "boxcox1p",
 
     Examples
     --------
-    >> boxcox1p(1e-4, [0, 0.5, 1])
+    >>> boxcox1p(1e-4, [0, 0.5, 1])
     array([  9.99950003e-05,   9.99975001e-05,   1.00000000e-04])
     >>> boxcox1p([0.01, 0.1], 0.25)
     array([ 0.00996272,  0.09645476])
+    """)
+
+add_newdoc("scipy.special", "inv_boxcox",
+    """
+    inv_boxcox(y, lmbda)
+
+    Compute the inverse of the Box-Cox transformation.
+
+    Find ``x`` such that::
+
+        y = (x**lmbda - 1) / lmbda  if lmbda != 0
+            log(x)                  if lmbda == 0
+
+    Parameters
+    ----------
+    y : array_like
+        Data to be transformed.
+    lmbda : array_like
+        Power parameter of the Box-Cox transform.
+
+    Returns
+    -------
+    x : array
+        Transformed data.
+
+    Notes
+    -----
+
+    .. versionadded:: 0.16.0
+
+    Examples
+    --------
+    >>> y = boxcox([1, 4, 10], 2.5)
+    >>> inv_boxcox(y, 2.5)
+    array([1., 4., 10.])
+    """)
+
+add_newdoc("scipy.special", "inv_boxcox1p",
+    """
+    inv_boxcox1p(y, lmbda)
+
+    Compute the inverse of the Box-Cox transformation.
+
+    Find ``x`` such that::
+
+        y = ((1+x)**lmbda - 1) / lmbda  if lmbda != 0
+            log(1+x)                    if lmbda == 0
+
+    Parameters
+    ----------
+    y : array_like
+        Data to be transformed.
+    lmbda : array_like
+        Power parameter of the Box-Cox transform.
+
+    Returns
+    -------
+    x : array
+        Transformed data.
+
+    Notes
+    -----
+
+    .. versionadded:: 0.16.0
+
+    Examples
+    --------
+    >>> y = boxcox1p([1, 4, 10], 2.5)
+    >>> inv_boxcox1p(y, 2.5)
+    array([1., 4., 10.])
     """)
 
 add_newdoc("scipy.special", "btdtr",
@@ -960,7 +1040,7 @@ add_newdoc('scipy.special', 'expit',
 
     Notes
     -----
-    As a ufunc logit takes a number of optional
+    As a ufunc expit takes a number of optional
     keyword arguments. For more information
     see `ufuncs <http://docs.scipy.org/doc/numpy/reference/ufuncs.html>`_
 
@@ -1783,7 +1863,7 @@ add_newdoc("scipy.special", "kl_div",
 
     Elementwise function for computing Kullback-Leibler divergence.
 
-    .. math:: \text{kl_div}(x, y) = \begin{cases} x \log(x / y) - x + y & x > 0, y > 0 \\ y & x = 0, y \ge 0 \\ \infty & \text{otherwise} \end{cases}
+    .. math:: \text{kl\_div}(x, y) = \begin{cases} x \log(x / y) - x + y & x > 0, y > 0 \\ y & x = 0, y \ge 0 \\ \infty & \text{otherwise} \end{cases}
 
     Parameters
     ----------
@@ -2767,7 +2847,7 @@ add_newdoc("scipy.special", "pro_rad2",
 
     Computes the prolate spheroidal radial function of the second kind
     and its derivative (with respect to x) for mode parameters m>=0
-    and n>=m, spheroidal parameter c and |x|<1.0.
+    and n>=m, spheroidal parameter c and ``|x| < 1.0``.
 
     Returns
     -------
@@ -2802,7 +2882,7 @@ add_newdoc("scipy.special", "pseudo_huber",
 
     Pseudo-Huber loss function.
 
-    .. math:: \text{pseudo_huber}(\delta, r) = \delta^2 \left( \sqrt{ 1 + \left( \frac{r}{\delta} \right)^2 } - 1 \right)
+    .. math:: \text{pseudo\_huber}(\delta, r) = \delta^2 \left( \sqrt{ 1 + \left( \frac{r}{\delta} \right)^2 } - 1 \right)
 
     Parameters
     ----------
@@ -2850,7 +2930,7 @@ add_newdoc("scipy.special", "rel_entr",
 
     Elementwise function for computing relative entropy.
 
-    .. math:: \text{rel_entr}(x, y) = \begin{cases} x \log(x / y) & x > 0, y > 0 \\ 0 & x = 0, y \ge 0 \\ \infty & \text{otherwise} \end{cases}
+    .. math:: \text{rel\_entr}(x, y) = \begin{cases} x \log(x / y) & x > 0, y > 0 \\ 0 & x = 0, y \ge 0 \\ \infty & \text{otherwise} \end{cases}
 
     Parameters
     ----------

@@ -42,18 +42,15 @@ __docformat__ = "restructuredtext en"
 
 __all__ = ['eigs', 'eigsh', 'svds', 'ArpackError', 'ArpackNoConvergence']
 
-import sys
-import warnings
 
 from . import _arpack
 import numpy as np
 from scipy.sparse.linalg.interface import aslinearoperator, LinearOperator
-from scipy.sparse import eye, csc_matrix, csr_matrix, \
-    isspmatrix, isspmatrix_csr
+from scipy.sparse import eye, isspmatrix, isspmatrix_csr
 from scipy.linalg import lu_factor, lu_solve
 from scipy.sparse.sputils import isdense
 from scipy.sparse.linalg import gmres, splu
-from scipy.linalg.lapack import get_lapack_funcs
+from scipy._lib._util import _aligned_zeros
 
 
 _type_conv = {'f': 's', 'd': 'd', 'F': 'c', 'D': 'z'}
@@ -509,8 +506,9 @@ class _SymmetricArpackParams(_ArpackParams):
         if self.ncv > n or self.ncv <= k:
             raise ValueError("ncv must be k<ncv<=n, ncv=%s" % self.ncv)
 
-        self.workd = np.zeros(3 * n, self.tp)
-        self.workl = np.zeros(self.ncv * (self.ncv + 8), self.tp)
+        # Use _aligned_zeros to work around a f2py bug in Numpy 1.9.1
+        self.workd = _aligned_zeros(3 * n, self.tp)
+        self.workl = _aligned_zeros(self.ncv * (self.ncv + 8), self.tp)
 
         ltr = _type_conv[self.tp]
         if ltr not in ["s", "d"]:
@@ -691,8 +689,9 @@ class _UnsymmetricArpackParams(_ArpackParams):
         if self.ncv > n or self.ncv <= k + 1:
             raise ValueError("ncv must be k+1<ncv<=n, ncv=%s" % self.ncv)
 
-        self.workd = np.zeros(3 * n, self.tp)
-        self.workl = np.zeros(3 * self.ncv * (self.ncv + 2), self.tp)
+        # Use _aligned_zeros to work around a f2py bug in Numpy 1.9.1
+        self.workd = _aligned_zeros(3 * n, self.tp)
+        self.workl = _aligned_zeros(3 * self.ncv * (self.ncv + 2), self.tp)
 
         ltr = _type_conv[self.tp]
         self._arpack_solver = _arpack.__dict__[ltr + 'naupd']
@@ -704,7 +703,8 @@ class _UnsymmetricArpackParams(_ArpackParams):
         self.ipntr = np.zeros(14, "int")
 
         if self.tp in 'FD':
-            self.rwork = np.zeros(self.ncv, self.tp.lower())
+            # Use _aligned_zeros to work around a f2py bug in Numpy 1.9.1
+            self.rwork = _aligned_zeros(self.ncv, self.tp.lower())
         else:
             self.rwork = None
 
@@ -897,10 +897,11 @@ class SpLuInv(LinearOperator):
     """
     def __init__(self, M):
         self.M_lu = splu(M)
-        LinearOperator.__init__(self, M.shape, None, dtype=M.dtype)
+        self.shape = M.shape
+        self.dtype = M.dtype
         self.isreal = not np.issubdtype(self.dtype, np.complexfloating)
 
-    def matvec(self, x):
+    def _matvec(self, x):
         # careful here: splu.solve will throw away imaginary
         # part of x if M is real
         x = np.asarray(x)
@@ -919,9 +920,10 @@ class LuInv(LinearOperator):
     """
     def __init__(self, M):
         self.M_lu = lu_factor(M)
-        LinearOperator.__init__(self, M.shape, None, dtype=M.dtype)
+        self.shape = M.shape
+        self.dtype = M.dtype
 
-    def matvec(self, x):
+    def _matvec(self, x):
         return lu_solve(self.M_lu, x)
 
 
@@ -940,13 +942,13 @@ class IterInv(LinearOperator):
         self.ifunc = ifunc
         self.tol = tol
         if hasattr(M, 'dtype'):
-            dtype = M.dtype
+            self.dtype = M.dtype
         else:
             x = np.zeros(M.shape[1])
-            dtype = (M * x).dtype
-        LinearOperator.__init__(self, M.shape, None, dtype=dtype)
+            self.dtype = (M * x).dtype
+        self.shape = M.shape
 
-    def matvec(self, x):
+    def _matvec(self, x):
         b, info = self.ifunc(self.M, x, tol=self.tol)
         if info != 0:
             raise ValueError("Error in inverting M: function "
@@ -989,15 +991,19 @@ class IterOpInv(LinearOperator):
             self.OP = LinearOperator(self.A.shape,
                                      mult_func,
                                      dtype=dtype)
-        LinearOperator.__init__(self, A.shape, None, dtype=dtype)
+        self.shape = A.shape
 
-    def matvec(self, x):
+    def _matvec(self, x):
         b, info = self.ifunc(self.OP, x, tol=self.tol)
         if info != 0:
             raise ValueError("Error in inverting [A-sigma*M]: function "
                              "%s did not converge (info = %i)."
                              % (self.ifunc.__name__, info))
         return b
+
+    @property
+    def dtype(self):
+        return self.OP.dtype
 
 
 def get_inv_matvec(M, symmetric=False, tol=0):
@@ -1303,7 +1309,7 @@ def eigsh(A, k=6, M=None, sigma=None, which='LM', v0=None,
     A : An N x N matrix, array, sparse matrix, or LinearOperator representing
         the operation A * x, where A is a real symmetric matrix
         For buckling mode (see below) A must additionally be positive-definite
-    k : int
+    k : int, optional
         The number of eigenvalues and eigenvectors desired.
         `k` must be smaller than N. It is not possible to compute all
         eigenvectors of a matrix.
@@ -1623,7 +1629,7 @@ def svds(A, k=6, ncv=None, tol=0, which='LM', v0=None,
 
     Parameters
     ----------
-    A : sparse matrix
+    A : {sparse matrix, LinearOperator}
         Array to compute the SVD on, of shape (M, N)
     k : int, optional
         Number of singular values and vectors to compute.
@@ -1648,46 +1654,79 @@ def svds(A, k=6, ncv=None, tol=0, which='LM', v0=None,
         Default: random
 
         .. versionadded:: 0.12.0
-    maxiter: int, optional
+    maxiter : int, optional
         Maximum number of iterations.
 
         .. versionadded:: 0.12.0
-    return_singular_vectors : bool, optional
-        Return singular vectors (True) in addition to singular values
+    return_singular_vectors : bool or str, optional
+        - True: return singular vectors (True) in addition to singular values.
 
         .. versionadded:: 0.12.0
+
+        - "u": only return the u matrix, without computing vh (if N > M).
+        - "vh": only return the vh matrix, without computing u (if N <= M).
+
+        .. versionadded:: 0.16.0
 
     Returns
     -------
     u : ndarray, shape=(M, k)
         Unitary matrix having left singular vectors as columns.
+        If `return_singular_vectors` is "vh", this variable is not computed,
+        and None is returned instead.
     s : ndarray, shape=(k,)
         The singular values.
     vt : ndarray, shape=(k, N)
         Unitary matrix having right singular vectors as rows.
+        If `return_singular_vectors` is "u", this variable is not computed,
+        and None is returned instead.
+
 
     Notes
     -----
     This is a naive implementation using ARPACK as an eigensolver
     on A.H * A or A * A.H, depending on which one is more efficient.
+
     """
-    if not (isinstance(A, np.ndarray) or isspmatrix(A)):
+    if not (isinstance(A, LinearOperator) or isspmatrix(A)):
         A = np.asarray(A)
 
     n, m = A.shape
 
-    if n > m:
-        X = A
-        XH = _herm(A)
+    if isinstance(A, LinearOperator):
+        if n > m:
+            X_dot = A.matvec
+            X_matmat = A.matmat
+            XH_dot = A.rmatvec
+        else:
+            X_dot = A.rmatvec
+            XH_dot = A.matvec
+
+            dtype = getattr(A, 'dtype', None)
+            if dtype is None:
+                dtype = A.dot(np.zeros([m,1])).dtype
+
+            # A^H * V; works around lack of LinearOperator.adjoint.
+            # XXX This can be slow!
+            def X_matmat(V):
+                out = np.empty((V.shape[1], m), dtype=dtype)
+                for i, col in enumerate(V.T):
+                    out[i, :] = A.rmatvec(col.reshape(-1, 1)).T
+                return out.T
+
     else:
-        XH = A
-        X = _herm(A)
+        if n > m:
+            X_dot = X_matmat = A.dot
+            XH_dot = _herm(A).dot
+        else:
+            XH_dot = A.dot
+            X_dot = X_matmat = _herm(A).dot
 
     def matvec_XH_X(x):
-        return XH.dot(X.dot(x))
+        return XH_dot(X_dot(x))
 
-    XH_X = LinearOperator(matvec=matvec_XH_X, dtype=X.dtype,
-                          shape=(X.shape[1], X.shape[1]))
+    XH_X = LinearOperator(matvec=matvec_XH_X, dtype=A.dtype,
+                          shape=(min(A.shape), min(A.shape)))
 
     # Get a low rank approximation of the implicitly defined gramian matrix.
     # This is not a stable way to approach the problem.
@@ -1720,14 +1759,14 @@ def svds(A, k=6, ncv=None, tol=0, which='LM', v0=None,
 
         if n > m:
             vlarge = eigvec[:, above_cutoff]
-            ularge = X.dot(vlarge) / slarge
+            ularge = X_matmat(vlarge) / slarge if return_singular_vectors != 'vh' else None
             vhlarge = _herm(vlarge)
         else:
             ularge = eigvec[:, above_cutoff]
-            vhlarge = _herm(X.dot(ularge) / slarge)
+            vhlarge = _herm(X_matmat(ularge) / slarge) if return_singular_vectors != 'u' else None
 
-        u = _augmented_orthonormal_cols(ularge, nsmall)
-        vh = _augmented_orthonormal_rows(vhlarge, nsmall)
+        u = _augmented_orthonormal_cols(ularge, nsmall) if ularge is not None else None
+        vh = _augmented_orthonormal_rows(vhlarge, nsmall) if vhlarge is not None else None
 
     else:
 
@@ -1737,10 +1776,10 @@ def svds(A, k=6, ncv=None, tol=0, which='LM', v0=None,
 
         if n > m:
             v = eigvec
-            u = X.dot(v) / s
+            u = X_matmat(v) / s if return_singular_vectors != 'vh' else None
             vh = _herm(v)
         else:
             u = eigvec
-            vh = _herm(X.dot(u) / s)
+            vh = _herm(X_matmat(u) / s) if return_singular_vectors != 'u' else None
 
     return u, s, vh

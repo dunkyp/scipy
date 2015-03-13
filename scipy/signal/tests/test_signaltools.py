@@ -1,21 +1,22 @@
 from __future__ import division, print_function, absolute_import
 
 from decimal import Decimal
+from itertools import product
 
 from numpy.testing import (
     TestCase, run_module_suite, assert_equal,
     assert_almost_equal, assert_array_equal, assert_array_almost_equal,
     assert_raises, assert_allclose, assert_, dec)
+from numpy import array, arange
+import numpy as np
 
-import scipy.signal as signal
+from scipy.optimize import fmin
+from scipy import signal
 from scipy.signal import (
     correlate, convolve, convolve2d, fftconvolve,
     hilbert, hilbert2, lfilter, lfilter_zi, filtfilt, butter, tf2zpk,
-    invres, vectorstrength, signaltools, lfiltic)
-
-
-from numpy import array, arange
-import numpy as np
+    invres, vectorstrength, signaltools, lfiltic, tf2sos, sosfilt, sosfilt_zi)
+from scipy.signal.signaltools import _filtfilt_gust
 
 
 class _TestConvolve(TestCase):
@@ -591,8 +592,8 @@ class _TestLinearFilter(TestCase):
         zi = np.ones(0).astype(self.dt)
         y, zf = lfilter(b, a, x, zi=zi)
         assert_array_almost_equal(y, x)
-        self.assertTrue(zf.dtype == self.dt)
-        self.assertTrue(zf.size == 0)
+        assert_equal(zf.dtype, self.dt)
+        assert_equal(zf.size, 0)
 
     def test_lfiltic_bad_zi(self):
         # Regression test for #3699: bad initial conditions
@@ -661,19 +662,19 @@ class _TestCorrelateReal(TestCase):
         a, b, y_r = self._setup_rank1()
         y = correlate(a, b, 'valid')
         assert_array_almost_equal(y, y_r[1:4])
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank1_same(self):
         a, b, y_r = self._setup_rank1()
         y = correlate(a, b, 'same')
         assert_array_almost_equal(y, y_r[:-1])
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank1_full(self):
         a, b, y_r = self._setup_rank1()
         y = correlate(a, b, 'full')
         assert_array_almost_equal(y, y_r)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def _setup_rank3(self):
         a = np.linspace(0, 39, 40).reshape((2, 4, 5), order='F').astype(
@@ -709,19 +710,19 @@ class _TestCorrelateReal(TestCase):
         a, b, y_r = self._setup_rank3()
         y = correlate(a, b, "valid")
         assert_array_almost_equal(y, y_r[1:2, 2:4, 3:5])
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank3_same(self):
         a, b, y_r = self._setup_rank3()
         y = correlate(a, b, "same")
         assert_array_almost_equal(y, y_r[0:-1, 1:-1, 1:-2])
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank3_all(self):
         a, b, y_r = self._setup_rank3()
         y = correlate(a, b)
         assert_array_almost_equal(y, y_r)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
 
 def _get_testcorrelate_class(datatype, base):
@@ -764,19 +765,19 @@ class _TestCorrelateComplex(TestCase):
         a, b, y_r = self._setup_rank1('valid')
         y = correlate(a, b, 'valid')
         assert_array_almost_equal(y, y_r, decimal=self.decimal)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank1_same(self):
         a, b, y_r = self._setup_rank1('same')
         y = correlate(a, b, 'same')
         assert_array_almost_equal(y, y_r, decimal=self.decimal)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank1_full(self):
         a, b, y_r = self._setup_rank1('full')
         y = correlate(a, b, 'full')
         assert_array_almost_equal(y, y_r, decimal=self.decimal)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
     def test_rank3(self):
         a = np.random.randn(10, 8, 6).astype(self.dt)
@@ -790,7 +791,7 @@ class _TestCorrelateComplex(TestCase):
 
         y = correlate(a, b, 'full')
         assert_array_almost_equal(y, y_r, decimal=self.decimal - 1)
-        self.assertTrue(y.dtype == self.dt)
+        assert_equal(y.dtype, self.dt)
 
 
 class TestCorrelate2d(TestCase):
@@ -889,6 +890,136 @@ class TestFiltFilt(TestCase):
         # test for 'a' coefficient as single number
         out = signal.filtfilt([.5, .5], 1, np.arange(10))
         assert_allclose(out, np.arange(10), rtol=1e-14, atol=1e-14)
+
+    def test_gust_simple(self):
+        # The input array has length 2.  The exact solution for this case
+        # was computed "by hand".
+        x = np.array([1.0, 2.0])
+        b = np.array([0.5])
+        a = np.array([1.0, -0.5])
+        y, z1, z2 = _filtfilt_gust(b, a, x)
+        assert_allclose([z1[0], z2[0]],
+                        [0.3*x[0] + 0.2*x[1], 0.2*x[0] + 0.3*x[1]])
+        assert_allclose(y, [z1[0] + 0.25*z2[0] + 0.25*x[0] + 0.125*x[1],
+                            0.25*z1[0] + z2[0] + 0.125*x[0] + 0.25*x[1]])
+
+    def test_gust_scalars(self):
+        # The filter coefficients are both scalars, so the filter simply
+        # multiplies its input by b/a.  When it is used in filtfilt, the
+        # factor is (b/a)**2.
+        x = np.arange(12)
+        b = 3.0
+        a = 2.0
+        y = filtfilt(b, a, x, method="gust")
+        expected = (b/a)**2 * x
+        assert_allclose(y, expected)
+
+
+def filtfilt_gust_opt(b, a, x):
+    """
+    An alternative implementation of filtfilt with Gustafsson edges.
+
+    This function computes the same result as
+    `scipy.signal.signaltools._filtfilt_gust`, but only 1-d arrays
+    are accepted.  The problem is solved using `fmin` from `scipy.optimize`.
+    `_filtfilt_gust` is significanly faster than this implementation.
+    """
+    def filtfilt_gust_opt_func(ics, b, a, x):
+        """Objective function used in filtfilt_gust_opt."""
+        m = max(len(a), len(b)) - 1
+        z0f = ics[:m]
+        z0b = ics[m:]
+        y_f = lfilter(b, a, x, zi=z0f)[0]
+        y_fb = lfilter(b, a, y_f[::-1], zi=z0b)[0][::-1]
+
+        y_b = lfilter(b, a, x[::-1], zi=z0b)[0][::-1]
+        y_bf = lfilter(b, a, y_b, zi=z0f)[0]
+        value = np.sum((y_fb - y_bf)**2)
+        return value
+
+    m = max(len(a), len(b)) - 1
+    zi = lfilter_zi(b, a)
+    ics = np.concatenate((x[:m].mean()*zi, x[-m:].mean()*zi))
+    result = fmin(filtfilt_gust_opt_func, ics, args=(b, a, x),
+                  xtol=1e-10, ftol=1e-12,
+                  maxfun=10000, maxiter=10000,
+                  full_output=True, disp=False)
+    opt, fopt, niter, funcalls, warnflag = result
+    if warnflag > 0:
+        raise RuntimeError("minimization failed in filtfilt_gust_opt: "
+                           "warnflag=%d" % warnflag)
+    z0f = opt[:m]
+    z0b = opt[m:]
+
+    # Apply the forward-backward filter using the computed initial
+    # conditions.
+    y_b = lfilter(b, a, x[::-1], zi=z0b)[0][::-1]
+    y = lfilter(b, a, y_b, zi=z0f)[0]
+
+    return y, z0f, z0b
+
+
+def check_filtfilt_gust(b, a, shape, axis, irlen=None):
+    # Generate x, the data to be filtered.
+    np.random.seed(123)
+    x = np.random.randn(*shape)
+
+    # Apply filtfilt to x. This is the main calculation to be checked.
+    y = filtfilt(b, a, x, axis=axis, method="gust", irlen=irlen)
+
+    # Also call the private function so we can test the ICs.
+    yg, zg1, zg2 = _filtfilt_gust(b, a, x, axis=axis, irlen=irlen)
+
+    # filtfilt_gust_opt is an independent implementation that gives the
+    # expected result, but it only handles 1-d arrays, so use some looping
+    # and reshaping shenanigans to create the expected output arrays.
+    xx = np.swapaxes(x, axis, -1)
+    out_shape = xx.shape[:-1]
+    yo = np.empty_like(xx)
+    m = max(len(a), len(b)) - 1
+    zo1 = np.empty(out_shape + (m,))
+    zo2 = np.empty(out_shape + (m,))
+    for indx in product(*[range(d) for d in out_shape]):
+        yo[indx], zo1[indx], zo2[indx] = filtfilt_gust_opt(b, a, xx[indx])
+    yo = np.swapaxes(yo, -1, axis)
+    zo1 = np.swapaxes(zo1, -1, axis)
+    zo2 = np.swapaxes(zo2, -1, axis)
+
+    assert_allclose(y, yo, rtol=1e-9, atol=1e-10)
+    assert_allclose(yg, yo, rtol=1e-9, atol=1e-10)
+    assert_allclose(zg1, zo1, rtol=1e-9, atol=1e-10)
+    assert_allclose(zg2, zo2, rtol=1e-9, atol=1e-10)
+
+
+def test_filtfilt_gust():
+    # Design a filter.
+    b, a = signal.ellip(3, 0.01, 120, 0.0875)
+
+    # Find the approximate impulse response length of the filter.
+    z, p, k = tf2zpk(b, a)
+    eps = 1e-10
+    r = np.max(np.abs(p))
+    approx_impulse_len = int(np.ceil(np.log(eps) / np.log(r)))
+
+    np.random.seed(123)
+
+    for irlen in [None, approx_impulse_len]:
+        signal_len = 5 * approx_impulse_len
+
+        # 1-d test case
+        yield check_filtfilt_gust, b, a, (signal_len,), 0, irlen
+
+        # 3-d test case; test each axis.
+        for axis in range(3):
+            shape = [2, 2, 2]
+            shape[axis] = signal_len
+            yield check_filtfilt_gust, b, a, shape, axis, irlen
+
+    # Test case with length less than 2*approx_impulse_len.
+    # In this case, `filtfilt_gust` should behave the same as if
+    # `irlen=None` was given.
+    length = 2*approx_impulse_len - 50
+    yield check_filtfilt_gust, b, a, (length,), 0, approx_impulse_len
 
 
 class TestDecimate(TestCase):
@@ -1205,6 +1336,160 @@ class TestVectorstrength(TestCase):
         period = -1
         assert_raises(ValueError, vectorstrength, events, period)
 
+
+class TestSOSFilt(TestCase):
+
+    # For sosfilt we only test a single datatype. Since sosfilt wraps
+    # to lfilter under the hood, it's hopefully good enough to ensure
+    # lfilter is extensively tested.
+    dt = np.float64
+
+    # The test_rank* tests are pulled from _TestLinearFilter
+    def test_rank1(self):
+        x = np.linspace(0, 5, 6).astype(self.dt)
+        b = np.array([1, -1]).astype(self.dt)
+        a = np.array([0.5, -0.5]).astype(self.dt)
+
+        # Test simple IIR
+        y_r = np.array([0, 2, 4, 6, 8, 10.]).astype(self.dt)
+        assert_array_almost_equal(sosfilt(tf2sos(b, a), x), y_r)
+
+        # Test simple FIR
+        b = np.array([1, 1]).astype(self.dt)
+        # NOTE: This was changed (rel. to TestLinear...) to add a pole @zero:
+        a = np.array([1, 0]).astype(self.dt)
+        y_r = np.array([0, 1, 3, 5, 7, 9.]).astype(self.dt)
+        assert_array_almost_equal(sosfilt(tf2sos(b, a), x), y_r)
+
+        b = [1, 1, 0]
+        a = [1, 0, 0]
+        x = np.ones(8)
+        sos = np.concatenate((b, a))
+        sos.shape = (1, 6)
+        y = sosfilt(sos, x)
+        assert_allclose(y, [1, 2, 2, 2, 2, 2, 2, 2])
+
+    def test_rank2(self):
+        shape = (4, 3)
+        x = np.linspace(0, np.prod(shape) - 1, np.prod(shape)).reshape(shape)
+        x = x.astype(self.dt)
+
+        b = np.array([1, -1]).astype(self.dt)
+        a = np.array([0.5, 0.5]).astype(self.dt)
+
+        y_r2_a0 = np.array([[0, 2, 4], [6, 4, 2], [0, 2, 4], [6, 4, 2]],
+                           dtype=self.dt)
+
+        y_r2_a1 = np.array([[0, 2, 0], [6, -4, 6], [12, -10, 12],
+                            [18, -16, 18]], dtype=self.dt)
+
+        y = sosfilt(tf2sos(b, a), x, axis=0)
+        assert_array_almost_equal(y_r2_a0, y)
+
+        y = sosfilt(tf2sos(b, a), x, axis=1)
+        assert_array_almost_equal(y_r2_a1, y)
+
+    def test_rank3(self):
+        shape = (4, 3, 2)
+        x = np.linspace(0, np.prod(shape) - 1, np.prod(shape)).reshape(shape)
+
+        b = np.array([1, -1]).astype(self.dt)
+        a = np.array([0.5, 0.5]).astype(self.dt)
+
+        # Test last axis
+        y = sosfilt(tf2sos(b, a), x)
+        for i in range(x.shape[0]):
+            for j in range(x.shape[1]):
+                assert_array_almost_equal(y[i, j], lfilter(b, a, x[i, j]))
+
+    def test_initial_conditions(self):
+        b1, a1 = signal.butter(2, 0.25, 'low')
+        b2, a2 = signal.butter(2, 0.75, 'low')
+        b3, a3 = signal.butter(2, 0.75, 'low')
+        b = np.convolve(np.convolve(b1, b2), b3)
+        a = np.convolve(np.convolve(a1, a2), a3)
+        sos = np.array((np.r_[b1, a1], np.r_[b2, a2], np.r_[b3, a3]))
+
+        x = np.random.rand(50)
+
+        # Stopping filtering and continuing
+        y_true, zi = lfilter(b, a, x[:20], zi=np.zeros(6))
+        y_true = np.r_[y_true, lfilter(b, a, x[20:], zi=zi)[0]]
+        assert_allclose(y_true, lfilter(b, a, x))
+
+        y_sos, zi = sosfilt(sos, x[:20], zi=np.zeros((3, 2)))
+        y_sos = np.r_[y_sos, sosfilt(sos, x[20:], zi=zi)[0]]
+        assert_allclose(y_true, y_sos)
+
+        # Use a step function
+        zi = sosfilt_zi(sos)
+        x = np.ones(8)
+        y, zf = sosfilt(sos, x, zi=zi)
+
+        assert_allclose(y, np.ones(8))
+        assert_allclose(zf, zi)
+
+        # Initial condition shape matching
+        x.shape = (1, 1) + x.shape  # 3D
+        assert_raises(ValueError, sosfilt, sos, x, zi=zi)
+        zi_nd = zi.copy()
+        zi_nd.shape = (zi.shape[0], 1, 1, zi.shape[-1])
+        assert_raises(ValueError, sosfilt, sos, x,
+                      zi=zi_nd[:, :, :, [0, 1, 1]])
+        y, zf = sosfilt(sos, x, zi=zi_nd)
+        assert_allclose(y[0, 0], np.ones(8))
+        assert_allclose(zf[:, 0, 0, :], zi)
+
+    def test_initial_conditions_3d_axis1(self):
+        # Test the use of zi when sosfilt is applied to axis 1 of a 3-d input.
+
+        # Input array is x.
+        np.random.seed(159)
+        x = np.random.randint(0, 5, size=(2, 15, 3))
+
+        # Design a filter in SOS format.
+        sos = signal.butter(6, 0.35, output='sos')
+        nsections = sos.shape[0]
+
+        # Filter along this axis.
+        axis = 1
+
+        # Initial conditions, all zeros.
+        shp = list(x.shape)
+        shp[axis] = 2
+        shp = [nsections] + shp
+        z0 = np.zeros(shp)
+
+        # Apply the filter to x.
+        yf, zf = sosfilt(sos, x, axis=axis, zi=z0)
+
+        # Apply the filter to x in two stages.
+        y1, z1 = sosfilt(sos, x[:, :5, :], axis=axis, zi=z0)
+        y2, z2 = sosfilt(sos, x[:, 5:, :], axis=axis, zi=z1)
+
+        # y should equal yf, and z2 should equal zf.
+        y = np.concatenate((y1, y2), axis=axis)
+        assert_allclose(y, yf, rtol=1e-10, atol=1e-13)
+        assert_allclose(z2, zf, rtol=1e-10, atol=1e-13)
+
+    def test_bad_zi_shape(self):
+        # The shape of zi is checked before using any values in the
+        # arguments, so np.empty is fine for creating the arguments.
+        x = np.empty((3, 15, 3))
+        sos = np.empty((4, 6))
+        zi = np.empty((4, 3, 3, 2))  # Correct shape is (4, 3, 2, 3)
+        assert_raises(ValueError, sosfilt, sos, x, zi=zi, axis=1)
+
+    def test_sosfilt_zi(self):
+        sos = signal.butter(6, 0.2, output='sos')
+        zi = sosfilt_zi(sos)
+
+        y, zf = sosfilt(sos, np.ones(40), zi=zi)
+        assert_allclose(zf, zi, rtol=1e-13)
+
+        # Expected steady state value of the step response of this filter:
+        ss = np.prod(sos[:, :3].sum(axis=-1) / sos[:, 3:].sum(axis=-1))
+        assert_allclose(y, ss, rtol=1e-13)
 
 if __name__ == "__main__":
     run_module_suite()

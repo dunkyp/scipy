@@ -117,19 +117,19 @@ conditions.
 
 .. plot::
 
-   >>> from numpy import *
+   >>> import numpy as np
    >>> from scipy import signal, misc
    >>> import matplotlib.pyplot as plt
 
-   >>> image = misc.lena().astype(float32)
-   >>> derfilt = array([1.0,-2,1.0],float32)
-   >>> ck = signal.cspline2d(image,8.0)
-   >>> deriv = signal.sepfir2d(ck, derfilt, [1]) + \
-   >>>         signal.sepfir2d(ck, [1], derfilt)
+   >>> image = misc.lena().astype(np.float32)
+   >>> derfilt = np.array([1.0, -2, 1.0], dtype=np.float32)
+   >>> ck = signal.cspline2d(image, 8.0)
+   >>> deriv = (signal.sepfir2d(ck, derfilt, [1]) +
+   ...          signal.sepfir2d(ck, [1], derfilt))
 
    Alternatively we could have done::
 
-       laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
+       laplacian = np.array([[0,1,0], [1,-4,1], [0,1,0]], dtype=np.float32)
        deriv2 = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
 
    >>> plt.figure()
@@ -447,7 +447,7 @@ As an example consider the following system:
 
 The code calculates the signal :math:`y[n]` for a given signal :math:`x[n]`;
 first for initial condiditions :math:`y[-1] = 0` (default case), then for
-:math:`y[-1] = 2` by means of :fun:`lfiltic`.
+:math:`y[-1] = 2` by means of :func:`lfiltic`.
 
 >>> import numpy as np
 >>> from scipy import signal

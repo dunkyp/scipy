@@ -18,16 +18,69 @@ __all__ = ['eig','eigh','eig_banded','eigvals','eigvalsh', 'eigvals_banded',
            'hessenberg']
 
 import numpy
+import numpy as np
 from numpy import array, asarray_chkfinite, asarray, diag, zeros, ones, \
         isfinite, inexact, nonzero, iscomplexobj, cast, flatnonzero, conj
 # Local imports
-from scipy.lib.six import xrange
+from scipy._lib.six import xrange
 from .misc import LinAlgError, _datacopied, norm
 from .lapack import get_lapack_funcs
 from .blas import get_blas_funcs
 
 
 _I = cast['F'](1j)
+
+
+def _asarray_validated(a, check_finite=True,
+                       sparse_ok=False, objects_ok=False, mask_ok=False):
+    """
+    Helper function for scipy argument validation.
+
+    Many scipy linear algebra functions do support arbitrary array-like
+    input arguments.  Examples of commonly unsupported inputs include
+    matrices containing inf/nan, sparse matrix representations, and
+    matrices with complicated elements.
+
+    Parameters
+    ----------
+    a : array_like
+        The array-like input.
+    check_finite : bool, optional
+        Whether to check that the input matrices contain only finite numbers.
+        Disabling may give a performance gain, but may result in problems
+        (crashes, non-termination) if the inputs do contain infinities or NaNs.
+        Default: True
+    sparse_ok : bool, optional
+        True if scipy sparse matrices are allowed.
+    objects_ok : bool, optional
+        True if arrays with dype('O') are allowed.
+    mask_ok : bool, optional
+        True if masked arrays are allowed.
+
+    Returns
+    -------
+    ret : ndarray
+        The converted validated array.
+
+    """
+    if not sparse_ok:
+        import scipy.sparse
+        if scipy.sparse.issparse(a):
+            msg = ('Sparse matrices are not supported by this function. '
+                   'Perhaps one of the scipy.linalg.sparse functions '
+                   'would work instead.')
+            raise ValueError(msg)
+    if not mask_ok:
+        if np.ma.isMaskedArray(a):
+            raise ValueError('masked arrays are not supported')
+    if check_finite:
+        a = np.asarray_chkfinite(a)
+    else:
+        a = np.asarray(a)
+    if not objects_ok:
+        if a.dtype is np.dtype('O'):
+            raise ValueError('object arrays are not supported')
+    return a
 
 
 def _make_complex_eigvecs(w, vin, dtype):
@@ -116,7 +169,7 @@ def eig(a, b=None, left=False, right=True, overwrite_a=False,
         Whether to overwrite `a`; may improve performance.  Default is False.
     overwrite_b : bool, optional
         Whether to overwrite `b`; may improve performance.  Default is False.
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrices contain only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -142,18 +195,12 @@ def eig(a, b=None, left=False, right=True, overwrite_a=False,
     eigh : Eigenvalues and right eigenvectors for symmetric/Hermitian arrays.
 
     """
-    if check_finite:
-        a1 = asarray_chkfinite(a)
-    else:
-        a1 = asarray(a)
+    a1 = _asarray_validated(a, check_finite=check_finite)
     if len(a1.shape) != 2 or a1.shape[0] != a1.shape[1]:
         raise ValueError('expected square matrix')
     overwrite_a = overwrite_a or (_datacopied(a1, a))
     if b is not None:
-        if check_finite:
-            b1 = asarray_chkfinite(b)
-        else:
-            b1 = asarray(b)
+        b1 = _asarray_validated(b, check_finite=check_finite)
         overwrite_b = overwrite_b or _datacopied(b1, b)
         if len(b1.shape) != 2 or b1.shape[0] != b1.shape[1]:
             raise ValueError('expected square matrix')
@@ -254,7 +301,7 @@ def eigh(a, b=None, lower=True, eigvals_only=False, overwrite_a=False,
         Whether to overwrite data in `a` (may improve performance)
     overwrite_b : bool, optional
         Whether to overwrite data in `b` (may improve performance)
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrices contain only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -293,10 +340,7 @@ def eigh(a, b=None, lower=True, eigvals_only=False, overwrite_a=False,
     eig : eigenvalues and right eigenvectors for non-symmetric arrays
 
     """
-    if check_finite:
-        a1 = asarray_chkfinite(a)
-    else:
-        a1 = asarray(a)
+    a1 = _asarray_validated(a, check_finite=check_finite)
     if len(a1.shape) != 2 or a1.shape[0] != a1.shape[1]:
         raise ValueError('expected square matrix')
     overwrite_a = overwrite_a or (_datacopied(a1, a))
@@ -305,10 +349,7 @@ def eigh(a, b=None, lower=True, eigvals_only=False, overwrite_a=False,
     else:
         cplx = False
     if b is not None:
-        if check_finite:
-            b1 = asarray_chkfinite(b)
-        else:
-            b1 = asarray(b)
+        b1 = _asarray_validated(b, check_finite=check_finite)
         overwrite_b = overwrite_b or _datacopied(b1, b)
         if len(b1.shape) != 2 or b1.shape[0] != b1.shape[1]:
             raise ValueError('expected square matrix')
@@ -481,7 +522,7 @@ def eig_banded(a_band, lower=False, eigvals_only=False, overwrite_a_band=False,
 
         In doubt, leave this parameter untouched.
 
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrix contains only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -499,10 +540,7 @@ def eig_banded(a_band, lower=False, eigvals_only=False, overwrite_a_band=False,
 
     """
     if eigvals_only or overwrite_a_band:
-        if check_finite:
-            a1 = asarray_chkfinite(a_band)
-        else:
-            a1 = asarray(a_band)
+        a1 = _asarray_validated(a_band, check_finite=check_finite)
         overwrite_a_band = overwrite_a_band or (_datacopied(a1, a_band))
     else:
         a1 = array(a_band)
@@ -597,9 +635,9 @@ def eigvals(a, b=None, overwrite_a=False, check_finite=True):
     b : (M, M) array_like, optional
         Right-hand side matrix in a generalized eigenvalue problem.
         If omitted, identity matrix is assumed.
-    overwrite_a : boolean, optional
+    overwrite_a : bool, optional
         Whether to overwrite data in a (may improve performance)
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrices contain only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -658,7 +696,7 @@ def eigvalsh(a, b=None, lower=True, overwrite_a=False,
         Indexes of the smallest and largest (in ascending order) eigenvalues
         and corresponding eigenvectors to be returned: 0 <= lo < hi <= M-1.
         If omitted, all eigenvalues and eigenvectors are returned.
-    type : integer, optional
+    type : int, optional
         Specifies the problem type to be solved:
 
            type = 1: a   v[:,i] = w[i] b v[:,i]
@@ -670,7 +708,7 @@ def eigvalsh(a, b=None, lower=True, overwrite_a=False,
         Whether to overwrite data in `a` (may improve performance)
     overwrite_b : bool, optional
         Whether to overwrite data in `b` (may improve performance)
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrices contain only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -738,11 +776,11 @@ def eigvals_banded(a_band, lower=False, overwrite_a_band=False,
     ----------
     a_band : (u+1, M) array_like
         The bands of the M by M matrix a.
-    lower : boolean
+    lower : bool, optional
         Is the matrix in the lower form. (Default is upper form)
-    overwrite_a_band:
+    overwrite_a_band : bool, optional
         Discard data in a_band (may enhance performance)
-    select : {'a', 'v', 'i'}
+    select : {'a', 'v', 'i'}, optional
         Which eigenvalues to calculate
 
         ======  ========================================
@@ -752,9 +790,9 @@ def eigvals_banded(a_band, lower=False, overwrite_a_band=False,
         'v'     Eigenvalues in the interval (min, max]
         'i'     Eigenvalues with indices min <= i <= max
         ======  ========================================
-    select_range : (min, max)
+    select_range : (min, max), optional
         Range of selected eigenvalues
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrix contains only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -803,7 +841,7 @@ def hessenberg(a, calc_q=False, overwrite_a=False, check_finite=True):
     overwrite_a : bool, optional
         Whether to overwrite `a`; may improve performance.
         Default is False.
-    check_finite : boolean, optional
+    check_finite : bool, optional
         Whether to check that the input matrix contains only finite numbers.
         Disabling may give a performance gain, but may result in problems
         (crashes, non-termination) if the inputs do contain infinities or NaNs.
@@ -817,13 +855,17 @@ def hessenberg(a, calc_q=False, overwrite_a=False, check_finite=True):
         Only returned if ``calc_q=True``.
 
     """
-    if check_finite:
-        a1 = asarray_chkfinite(a)
-    else:
-        a1 = asarray(a)
+    a1 = _asarray_validated(a, check_finite=check_finite)
     if len(a1.shape) != 2 or (a1.shape[0] != a1.shape[1]):
         raise ValueError('expected square matrix')
     overwrite_a = overwrite_a or (_datacopied(a1, a))
+
+    # if 2x2 or smaller: already in Hessenberg
+    if a1.shape[0] <= 2:
+        if calc_q:
+            return a1, numpy.eye(a1.shape[0])
+        return a1
+
     gehrd, gebal, gehrd_lwork = get_lapack_funcs(('gehrd','gebal', 'gehrd_lwork'), (a1,))
     ba, lo, hi, pivscale, info = gebal(a1, permute=0, overwrite_a=overwrite_a)
     if info < 0:
@@ -833,35 +875,27 @@ def hessenberg(a, calc_q=False, overwrite_a=False, check_finite=True):
 
     lwork, info = gehrd_lwork(ba.shape[0], lo=lo, hi=hi)
     if info != 0:
-        raise ValueError('failed to compute internal gehrd work array size' % info)
+        raise ValueError('failed to compute internal gehrd work array size. '
+                            'LAPACK info = %d ' % info)
     lwork = int(lwork.real)
 
     hq, tau, info = gehrd(ba, lo=lo, hi=hi, lwork=lwork, overwrite_a=1)
     if info < 0:
         raise ValueError('illegal value in %d-th argument of internal gehrd '
                                         '(hessenberg)' % -info)
-
+    h = numpy.triu(hq, -1)
     if not calc_q:
-        for i in range(lo, hi):
-            hq[i+2:hi+1, i] = 0.0
-        return hq
+        return h
 
-    # XXX: Use ORGHR routines to compute q.
-    typecode = hq.dtype
-    ger,gemm = get_blas_funcs(('ger','gemm'), dtype=typecode)
-    q = None
-    for i in range(lo, hi):
-        if tau[i] == 0.0:
-            continue
-        v = zeros(n, dtype=typecode)
-        v[i+1] = 1.0
-        v[i+2:hi+1] = hq[i+2:hi+1, i]
-        hq[i+2:hi+1, i] = 0.0
-        h = ger(-tau[i], v, v,a=diag(ones(n, dtype=typecode)), overwrite_a=1)
-        if q is None:
-            q = h
-        else:
-            q = gemm(1.0, q, h)
-    if q is None:
-        q = diag(ones(n, dtype=typecode))
-    return hq, q
+    # use orghr/unghr to compute q
+    orghr, orghr_lwork = get_lapack_funcs(('orghr', 'orghr_lwork'), (a1,))
+    lwork, info = orghr_lwork(n, lo=lo, hi=hi)
+    if info != 0:
+        raise ValueError('failed to compute internal orghr work array size. '
+                            'LAPACK info = %d ' % info)
+    lwork = int(lwork.real)
+    q, info = orghr(a=hq, tau=tau, lo=lo, hi=hi, lwork=lwork, overwrite_a=1)
+    if info < 0:
+        raise ValueError('illegal value in %d-th argument of internal orghr '
+                         '(hessenberg)' % -info)
+    return h, q
